@@ -102,7 +102,7 @@ Resultado esperado: **0 FAIL → pronto para produção**.
 | Bluetooth | `bluez`, `bluez-utils` |
 | GPU AMD | `mesa`, `vulkan-radeon`, `libva-mesa-driver` |
 | Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |
-| Display Manager | `sddm` |
+| Display Manager | `sddm` + tema **SilentSDDM** + deps Qt (igual ao Niri) |
 | Dotfiles | GNU Stow (incluídos no repo) |
 
 > Para Fedora, os mesmos pacotes são instalados via `dnf` + COPR `solopasha/hyprland`.

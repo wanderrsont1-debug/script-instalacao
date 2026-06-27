@@ -200,24 +200,80 @@ build_waybar() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# SDDM — Instalar e habilitar como Display Manager
+# SDDM + SilentSDDM — Instalar, configurar tema e habilitar
+# Idêntico ao processo do ambiente Niri (greeter.sh)
 # ─────────────────────────────────────────────────────────────
 setup_sddm() {
-    log_info "Configurando SDDM como Display Manager..."
+    local repo_dir
+    repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
+
+    log_info "Instalando SDDM e dependências Qt para o tema SilentSDDM..."
 
     if [ "${DISTRO:-}" = "arch" ]; then
-        sudo pacman -S --needed --noconfirm sddm
+        # Pacotes SDDM + Qt necessários para o SilentSDDM (igual ao arch-sddm.txt do Niri)
+        sudo pacman -S --needed --noconfirm \
+            sddm \
+            xorg-server \
+            qt6-5compat \
+            qt6-svg \
+            qt6-virtualkeyboard \
+            qt6-multimedia \
+            qt5-graphicaleffects \
+            qt5-quickcontrols2 \
+            qt5-virtualkeyboard || {
+            log_warn "Alguns pacotes Qt podem ter falhado — continuando."
+        }
+
     elif [ "${DISTRO:-}" = "fedora" ]; then
-        sudo dnf install -y sddm
+        sudo dnf install -y \
+            sddm \
+            qt6-qt5compat \
+            qt6-qtsvg \
+            qt6-qtvirtualkeyboard \
+            qt6-qtmultimedia \
+            qt5-qtgraphicaleffects \
+            qt5-qtquickcontrols2 \
+            qt5-qtvirtualkeyboard || {
+            log_warn "Alguns pacotes Qt podem ter falhado — continuando."
+        }
     fi
 
-    # Habilitar o serviço SDDM
-    sudo systemctl enable sddm.service || {
+    # ── Clonar tema SilentSDDM ──────────────────────────────────────
+    if [ ! -d "/usr/share/sddm/themes/silent" ]; then
+        log_info "Clonando tema SilentSDDM..."
+        sudo git clone https://github.com/uiriansan/SilentSDDM.git \
+            /usr/share/sddm/themes/silent || {
+            log_warn "Falha ao clonar SilentSDDM — SDDM será instalado sem tema personalizado."
+        }
+    else
+        log_info "Tema SilentSDDM já instalado."
+    fi
+
+    # ── Copiar configurações do SDDM (sddm.conf + virtualkbd) ────────
+    if [ -f "$repo_dir/system/etc/sddm.conf" ]; then
+        log_info "Aplicando sddm.conf (tema silent)..."
+        sudo cp -r "$repo_dir/system/etc/sddm.conf" /etc/sddm.conf
+    fi
+
+    if [ -d "$repo_dir/system/etc/sddm.conf.d" ]; then
+        sudo mkdir -p /etc/sddm.conf.d
+        sudo cp -r "$repo_dir/system/etc/sddm.conf.d/"* /etc/sddm.conf.d/
+    fi
+
+    # ── Copiar vídeos, imagens e configs customizados do tema ───────
+    if [ -d "$repo_dir/system/usr/share/sddm/themes/silent" ]; then
+        log_info "Restaurando vídeos e configs customizados do SilentSDDM..."
+        sudo cp -r "$repo_dir/system/usr/share/sddm/themes/silent/"* \
+            /usr/share/sddm/themes/silent/
+    fi
+
+    # ── Habilitar serviço SDDM ──────────────────────────────────
+    sudo systemctl enable sddm.service 2>/dev/null || {
         log_warn "Não foi possível habilitar sddm.service automaticamente."
         log_info "Execute manualmente: sudo systemctl enable sddm"
     }
 
-    log_success "SDDM instalado e habilitado."
+    log_success "SDDM + tema SilentSDDM instalado e configurado!"
 }
 
 # ─────────────────────────────────────────────────────────────
