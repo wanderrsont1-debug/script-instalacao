@@ -35,6 +35,13 @@ nautilus
 grim
 slurp
 
+# ─── Apps GUI ────────────────────────────────────────────────
+nautilus
+firefox
+keepassxc
+gnome-disk-utility
+flatpak
+
 # ─── Relógio / Utilitários GNOME ──────────────────────────────
 gnome-clocks
 
@@ -61,6 +68,8 @@ sddm
 # ─── Fonts ────────────────────────────────────────────────────
 google-noto-fonts-common
 google-noto-emoji-fonts
+cantarell-fonts
+mscore-fonts-all
 
 # ─── Ferramentas do sistema ───────────────────────────────────
 git

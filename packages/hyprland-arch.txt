@@ -38,6 +38,13 @@ nautilus
 hyprshot
 hyprpicker
 
+# ─── Apps GUI ────────────────────────────────────────────────
+nautilus
+firefox
+keepassxc
+gnome-disk-utility
+flatpak
+
 # ─── Relógio / Utilitários GNOME ──────────────────────────────
 gnome-clocks
 
@@ -68,10 +75,12 @@ lib32-mesa-vdpau
 sddm
 
 # ─── Fonts ────────────────────────────────────────────────────
-ttf-nerd-fonts-symbols
-ttf-nerd-fonts-symbols-mono
 noto-fonts
 noto-fonts-emoji
+cantarell-fonts
+ttf-meslo-nerd
+ttf-nerd-fonts-symbols
+ttf-nerd-fonts-symbols-mono
 
 # ─── Ferramentas do sistema ───────────────────────────────────
 git

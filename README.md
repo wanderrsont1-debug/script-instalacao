@@ -97,9 +97,11 @@ Resultado esperado: **0 FAIL → pronto para produção**.
 | Notificações | `swaync` |
 | Widgets | `eww` |
 | Terminal | `ghostty` |
+| Apps GUI | `nautilus`, `firefox`, `keepassxc`, `gnome-disk-utility`, `flatpak` |
 | Áudio | `pipewire`, `wireplumber`, `pavucontrol` |
 | Bluetooth | `bluez`, `bluez-utils` |
 | GPU AMD | `mesa`, `vulkan-radeon`, `libva-mesa-driver` |
+| Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |
 | Display Manager | `sddm` |
 | Dotfiles | GNU Stow (incluídos no repo) |
 
