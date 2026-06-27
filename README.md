@@ -64,6 +64,29 @@ Resultado esperado: **0 FAIL → pronto para produção**.
 
 ---
 
+## 📦 O que é instalado (Niri + DMS — Arch)
+
+| Categoria | Pacotes |
+|---|---|
+| Compositor | `niri`, `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, `xdg-desktop-portal-gnome` |
+| Shell de Desktop | `dms-shell`, `matugen` |
+| Terminais | `alacritty`, `ghostty` |
+| Launcher | `fuzzel` |
+| Shell | `fish` |
+| Editor | `micro` |
+| Monitor / Fetch | `btop`, `fastfetch`, `cava` |
+| Áudio | `pipewire`, `pipewire-pulse`, `pipewire-alsa`, `wireplumber`, `pavucontrol` |
+| Bluetooth | `bluez`, `bluez-utils` |
+| Rede | `networkmanager` |
+| Multimídia | `mpv`, `ffmpeg`, `gst-plugins-*` |
+| Apps GUI | `nautilus`, `firefox`, `keepassxc`, `gnome-disk-utility`, `flatpak` |
+| Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |
+| Display Manager | `sddm` (com tema SilentSDDM) **ou** `greetd` + `tuigreet` |
+| Segurança | `polkit-gnome`, `gnome-keyring`, `seahorse`, `ufw` |
+| Opcionais | `zen-browser-bin` (perguntado na instalação) |
+
+---
+
 ## 📦 O que é instalado (Hyprland — Arch)
 
 | Categoria | Pacotes |
