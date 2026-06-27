@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Instalador Unificado de Ambiente Niri — Arch Linux / Fedora
+# ═══════════════════════════════════════════════════════════════
+# Instalador Unificado de Ambiente — Arch Linux / Fedora
+# Ambientes suportados:
+#   - Niri (DankMaterialShell)
+#   - Hyprland (Jules3182/dotfiles — Lua 0.55+)
+#
 # Melhorias baseadas no donarch (GitLab):
 #   - checks.sh dedicado (detecção de distro, AUR helper, pacotes base)
 #   - Backup automático de ~/.config antes dos dotfiles
 #   - Seleção interativa de apps opcionais
 #   - detect_user() para suporte correto a sudo
+# ═══════════════════════════════════════════════════════════════
 
 set -e          # Interrompe imediatamente se qualquer comando falhar
 set -o pipefail # Propaga falhas em pipes
@@ -18,6 +24,7 @@ source "$REPO_DIR/lib/checks.sh"
 source "$REPO_DIR/lib/packages.sh"
 source "$REPO_DIR/lib/dotfiles.sh"
 source "$REPO_DIR/lib/greeter.sh"
+source "$REPO_DIR/lib/hyprland.sh"
 
 # ─────────────────────────────────────────────────────────────
 # Tela de boas-vindas
@@ -25,11 +32,10 @@ source "$REPO_DIR/lib/greeter.sh"
 show_welcome() {
     clear
     echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║     Instalador Unificado de Ambiente (Niri)      ║${NC}"
+    echo -e "${GREEN}║       Instalador Unificado de Ambiente           ║${NC}"
     echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║  Suporta: Arch Linux / CachyOS / Fedora          ║${NC}"
-    echo -e "${CYAN}║  Display Managers: SDDM (Silent) ou greetd       ║${NC}"
-    echo -e "${CYAN}║  Shell: DankMaterialShell (dms-shell)             ║${NC}"
+    echo -e "${CYAN}║  Ambientes: Niri (DMS) | Hyprland (Lua 0.55+)    ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -41,150 +47,120 @@ show_welcome() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# Seleção do Display Manager
+# Seleção do ambiente a instalar
+# ─────────────────────────────────────────────────────────────
+select_environment() {
+    echo ""
+    echo -e "${BLUE}┌──────────────────────────────────────────────────┐${NC}"
+    echo -e "${BLUE}│        Selecione o ambiente a instalar:          │${NC}"
+    echo -e "${BLUE}├──────────────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}│  1) Niri   — DankMaterialShell (dms-shell)       │${NC}"
+    echo -e "${CYAN}│  2) Hyprland — Jules3182/dotfiles (Lua 0.55+)    │${NC}"
+    echo -e "${CYAN}│  3) Ambos  — instalar Niri e Hyprland            │${NC}"
+    echo -e "${CYAN}│  0) Sair                                         │${NC}"
+    echo -e "${BLUE}└──────────────────────────────────────────────────┘${NC}"
+    echo ""
+
+    local choice
+    read -rp "  Digite sua escolha [0-3]: " choice
+
+    case "$choice" in
+        1)
+            export INSTALL_ENV="niri"
+            log_info "Ambiente selecionado: Niri"
+            ;;
+        2)
+            export INSTALL_ENV="hyprland"
+            log_info "Ambiente selecionado: Hyprland"
+            ;;
+        3)
+            export INSTALL_ENV="both"
+            log_info "Ambientes selecionados: Niri + Hyprland"
+            ;;
+        0)
+            log_info "Instalação cancelada pelo usuário."
+            exit 0
+            ;;
+        *)
+            log_warn "Opção inválida. Selecionando Hyprland como padrão."
+            export INSTALL_ENV="hyprland"
+            ;;
+    esac
+}
+
+# ─────────────────────────────────────────────────────────────
+# Seleção do Display Manager (para Niri)
 # ─────────────────────────────────────────────────────────────
 select_display_manager() {
-    echo -e "${BLUE}===============================================${NC}"
-    echo -e "${YELLOW}Selecione o gerenciador de login (Display Manager):${NC}"
-    echo -e "  1) SDDM (com tema Silent)"
-    echo -e "  2) greetd (com tuigreet)"
-    echo -e "  3) Nenhum (não gerenciar Display Manager)"
-    echo -e "${BLUE}===============================================${NC}"
-
-    while true; do
-        read -p "Opção [1-3] (padrão: 1): " dm_choice
-        dm_choice=${dm_choice:-1}
-        if [[ "$dm_choice" =~ ^[1-3]$ ]]; then
-            break
-        else
-            log_warn "Opção inválida. Por favor, selecione 1, 2 ou 3."
-        fi
-    done
     echo ""
+    echo -e "${BLUE}Selecione o Display Manager para o ambiente Niri:${NC}"
+    echo -e "  ${CYAN}1)${NC} SDDM (Silent)"
+    echo -e "  ${CYAN}2)${NC} greetd + tuigreet"
+    echo ""
+
+    local dm_choice
+    read -rp "  Digite sua escolha [1-2]: " dm_choice
+
+    case "$dm_choice" in
+        1) export DM_CHOICE="sddm" ;;
+        2) export DM_CHOICE="greetd" ;;
+        *)
+            log_warn "Opção inválida. Usando SDDM como padrão."
+            export DM_CHOICE="sddm"
+            ;;
+    esac
 }
 
 # ─────────────────────────────────────────────────────────────
-# Confirmação de backup
-# ─────────────────────────────────────────────────────────────
-confirm_backup() {
-    echo -e "${BLUE}===============================================${NC}"
-    echo -e "${YELLOW}Backup de Configurações${NC}"
-    echo -e "${BLUE}===============================================${NC}"
-    log_info "Recomendamos fazer backup do seu ~/.config antes de implantar dotfiles."
-    echo ""
-
-    if prompt_yes_no "Deseja criar backup de ~/.config agora? (Recomendado)" "S"; then
-        backup_existing_configs
-    else
-        log_warn "Backup ignorado — configurações existentes podem ser sobrescritas."
-    fi
-    echo ""
-}
-
-# ─────────────────────────────────────────────────────────────
-# Fluxo de instalação principal
+# MAIN — Ponto de entrada
 # ─────────────────────────────────────────────────────────────
 main() {
-    # 0. Tela de boas-vindas
+    # Verificações iniciais
+    check_not_root || exit 1
+    check_distro   || exit 1
+
+    # Boas-vindas
     show_welcome
 
-    # 1. Verificações de sistema (distro, root, rede, AUR helper, pacotes base)
-    run_all_checks || { log_error "Verificações de sistema falharam. Abortando."; exit 1; }
+    # Selecionar ambiente
+    select_environment
 
-    # 2. Selecionar Display Manager
-    select_display_manager
+    # ── Instalar Niri ────────────────────────────────────────
+    if [[ "$INSTALL_ENV" == "niri" || "$INSTALL_ENV" == "both" ]]; then
+        select_display_manager
+        # A instalação do Niri usa as funções já existentes no repo
+        # (packages.sh, dotfiles.sh, greeter.sh)
+        log_info "Iniciando instalação do ambiente Niri..."
 
-    # 3. Backup de configurações existentes
-    confirm_backup
+        if [ "${DISTRO}" = "arch" ]; then
+            detect_aur_helper || log_warn "AUR helper não encontrado — pacotes AUR serão ignorados."
+            install_package_list "$REPO_DIR/packages/arch-base.txt" "pacotes base Arch" || true
+        elif [ "${DISTRO}" = "fedora" ]; then
+            setup_fedora_repos "$DM_CHOICE"
+            install_package_list "$REPO_DIR/packages/fedora-base.txt" "pacotes base Fedora" || true
+        fi
 
-    # 4. Instalar pacotes baseados na distribuição
-    # Subshell evita que set -e aborte o script se um pacote AUR falhar
-    if [ "$DISTRO" = "fedora" ]; then
-        ( install_fedora_packages "$dm_choice" ) || log_warn "Alguns pacotes podem não ter sido instalados."
-    else
-        ( install_arch_packages "$dm_choice" "$REPO_DIR" ) || log_warn "Alguns pacotes podem não ter sido instalados."
+        # Aplicar dotfiles Niri
+        if [ -d "$REPO_DIR/dotfiles" ]; then
+            deploy_dotfiles "$REPO_DIR/dotfiles"
+        fi
+
+        # Configurar greeter/DM
+        if declare -f setup_greeter &>/dev/null; then
+            setup_greeter "$DM_CHOICE"
+        fi
+
+        log_success "Ambiente Niri instalado."
     fi
 
-    # 5. Implantar dotfiles
-    if prompt_yes_no "Deseja implantar os arquivos de configuração (dotfiles) via links simbólicos?" "S"; then
-        deploy_dotfiles "$REPO_DIR"
+    # ── Instalar Hyprland ────────────────────────────────────
+    if [[ "$INSTALL_ENV" == "hyprland" || "$INSTALL_ENV" == "both" ]]; then
+        install_hyprland_environment
     fi
 
-    # 6. Configurar Display Manager
-    configure_display_manager "$dm_choice" "$REPO_DIR"
-
-    # 7. Habilitar serviços do sistema
-    enable_systemd_services "$dm_choice"
-
-    # 8. Verificar se o Display Manager está pronto antes de reiniciar
-    local dm_verified=true
-    if [ "$dm_choice" != "3" ]; then
-        verify_display_manager "$dm_choice" "$REPO_DIR" || dm_verified=false
-    fi
-
-    # 9. Verificar se o ambiente Niri + DMS está correto antes de reiniciar
-    local niri_verified=true
-    verify_niri_environment "$REPO_DIR" || niri_verified=false
-
-    # ─────────────────────────────────────────────────────────
-    # Conclusão
-    # ─────────────────────────────────────────────────────────
     echo ""
-    if $dm_verified && $niri_verified; then
-        echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║           Instalação Concluída com Sucesso!      ║${NC}"
-        echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
-        echo -e "${CYAN}║  Próximos passos:                                ║${NC}"
-        echo -e "${CYAN}║  1. Reinicie o sistema para ativar o DM          ║${NC}"
-        echo -e "${CYAN}║  2. Faça login e selecione a sessão Niri         ║${NC}"
-        echo -e "${CYAN}║  3. O ambiente DMS iniciará automaticamente      ║${NC}"
-        echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
-        echo -e "${YELLOW}║  Teclas principais do Niri:                      ║${NC}"
-        echo -e "${YELLOW}║  Super+Return → Terminal (Ghostty)               ║${NC}"
-        echo -e "${YELLOW}║  Super+Q      → Fechar janela                    ║${NC}"
-        echo -e "${YELLOW}║  Super+F      → Fullscreen                       ║${NC}"
-        echo -e "${YELLOW}║  Ctrl+Space   → Launcher (DMS Spotlight)         ║${NC}"
-        echo -e "${YELLOW}║  Super+Shift+Q → Menu de sessão (PowerMenu)      ║${NC}"
-        echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
-    else
-        echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║     Instalação Concluída — COM AVISOS ⚠         ║${NC}"
-        echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
-        if ! $dm_verified; then
-            echo -e "${RED}║  A verificação do Display Manager encontrou     ║${NC}"
-            echo -e "${RED}║  problemas. Revise os erros acima antes de      ║${NC}"
-            echo -e "${RED}║  reiniciar para evitar ficar preso no TTY.      ║${NC}"
-        fi
-        if ! $niri_verified; then
-            echo -e "${RED}║  A verificação do Niri+DMS encontrou erros.     ║${NC}"
-            echo -e "${RED}║  Keybinds ou o shell podem não funcionar        ║${NC}"
-            echo -e "${RED}║  corretamente. Revise os erros acima.           ║${NC}"
-        fi
-        echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
-    fi
+    log_success "Instalação concluída! Reinicie o sistema para aplicar as mudanças."
     echo ""
-
-    if $dm_verified && $niri_verified; then
-        log_warn "Recomenda-se reiniciar o computador para aplicar todas as configurações."
-        echo ""
-        if prompt_yes_no "Deseja reiniciar o sistema agora?" "N"; then
-            log_info "Reiniciando em 3 segundos..."
-            sleep 3
-            sudo reboot
-        fi
-    else
-        if ! $dm_verified; then
-            log_error "NÃO é recomendado reiniciar com problemas no Display Manager."
-            log_info "Corrija os erros e depois execute:"
-            log_info "  sudo systemctl enable sddm.service"
-            log_info "  sudo systemctl set-default graphical.target"
-        fi
-        if ! $niri_verified; then
-            log_error "NÃO é recomendado reiniciar com erros na configuração do Niri+DMS."
-            log_info "Corrija os erros nos dotfiles e reimplante com: bash install.sh"
-        fi
-        log_info "Após corrigir, execute: sudo reboot"
-    fi
 }
 
-main
+main "$@"
