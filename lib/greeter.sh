@@ -26,13 +26,13 @@ configure_display_manager() {
                 fi
                 if [ -d "$repo_dir/system/etc/sddm.conf.d" ]; then
                     sudo mkdir -p /etc/sddm.conf.d
-                    sudo cp -r "$repo_dir/system/etc/sddm.conf.d/"* /etc/sddm.conf.d/
+                    sudo cp -a "$repo_dir/system/etc/sddm.conf.d/." /etc/sddm.conf.d/
                 fi
                 
                 # Restaurar customizações do tema SilentSDDM (vídeos, configs, metadata)
                 if [ -d "$repo_dir/system/usr/share/sddm/themes/silent" ]; then
                     log_info "Restaurando configurações e vídeos customizados do tema SilentSDDM..."
-                    sudo cp -r "$repo_dir/system/usr/share/sddm/themes/silent/"* /usr/share/sddm/themes/silent/
+                    sudo cp -a "$repo_dir/system/usr/share/sddm/themes/silent/." /usr/share/sddm/themes/silent/
                 fi
                 
                 log_success "SDDM configurado com o tema Silent!"

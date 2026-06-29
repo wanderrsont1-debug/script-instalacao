@@ -92,13 +92,13 @@ setup_fedora_repos() {
         sudo dnf install -y dnf-plugins-core
 
         log_info "Habilitando COPR avengemedia/dms (DankMaterialShell)..."
-        sudo dnf copr enable -y avengemedia/dms
+        sudo dnf copr enable -y avengemedia/dms || log_warn "Falha ao ativar COPR do DMS"
 
         log_info "Habilitando COPR scottames/ghostty (Ghostty terminal)..."
-        sudo dnf copr enable -y scottames/ghostty
+        sudo dnf copr enable -y scottames/ghostty || log_warn "Falha ao ativar COPR do ghostty"
 
         log_info "Habilitando COPR sneexy/zen-browser (Zen Browser)..."
-        sudo dnf copr enable -y sneexy/zen-browser
+        sudo dnf copr enable -y sneexy/zen-browser || log_warn "Falha ao ativar COPR do zen-browser"
     fi
     return 0
 }
@@ -208,7 +208,7 @@ setup_arch_repos() {
             tar -xf "$temp_dir/cachyos-repo.tar.xz" -C "$temp_dir"
             (
                 cd "$temp_dir/cachyos-repo"
-                sudo ./cachyos-repo.sh
+                sudo ./cachyos-repo.sh || echo "Falha ao executar script do CachyOS."
             )
             rm -rf "$temp_dir"
             sudo pacman -Syu --noconfirm
