@@ -95,5 +95,13 @@ deploy_dotfiles() {
         log_warn "Serviço dms.service não encontrado ou systemd --user indisponível. Será habilitado automaticamente ao iniciar o Niri."
     fi
     
+    # 5. Corrigir caminhos hardcoded no DankMaterialShell (json não suporta $HOME nativamente)
+    for json_file in "$config_dir/DankMaterialShell/settings.json" "$config_dir/DankMaterialShell/plugin_settings.json"; do
+        if [ -f "$json_file" ]; then
+            log_info "Ajustando caminho do usuário em $(basename "$json_file")..."
+            sed -i "s|/home/wanderson|$user_home|g" "$json_file"
+        fi
+    done
+    
     log_success "Dotfiles implantados com sucesso via links simbólicos!"
 }

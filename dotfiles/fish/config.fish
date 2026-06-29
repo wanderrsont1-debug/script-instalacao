@@ -8,4 +8,4 @@ source /usr/share/cachyos-fish-config/cachyos-config.fish
 
 
 # Added by Antigravity CLI installer
-set -gx PATH "/home/wanderson/.local/bin" $PATH
+set -gx PATH "$HOME/.local/bin" $PATH

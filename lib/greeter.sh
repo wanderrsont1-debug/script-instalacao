@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# Biblioteca para configurar Display Managers (SDDM / greetd) e habilitar serviços no systemd
+# Biblioteca para configurar Display Managers (SDDM) e habilitar serviços no systemd
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
 
-configure_display_manager() {
-    local dm_choice="$1"
-    local repo_dir="$2"
+    local repo_dir="$1"
     
-    if [ "$dm_choice" == "1" ]; then
-        if prompt_yes_no "Deseja configurar o SDDM e instalar o tema Silent?" "S"; then
+    if prompt_yes_no "Deseja configurar o SDDM e instalar o tema Silent?" "S"; then
             log_info "Instalando e configurando o tema Silent no SDDM..."
             
             # Baixar o tema SilentSDDM se não estiver lá
@@ -42,81 +39,20 @@ configure_display_manager() {
                 log_warn "Diretório de configurações $repo_dir/system não encontrado."
             fi
         fi
-        
-    elif [ "$dm_choice" == "2" ]; then
-        if prompt_yes_no "Deseja configurar o greetd com o tuigreet?" "S"; then
-            log_info "Configurando o greetd com tuigreet..."
-            sudo mkdir -p /etc/greetd
-
-            # Resolver o caminho absoluto do niri e do tuigreet para evitar falhas
-            # em ambientes mínimos onde o PATH do greeter pode ser diferente
-            local niri_bin
-            niri_bin=$(command -v niri 2>/dev/null || echo "/usr/bin/niri")
-            local tuigreet_bin
-            tuigreet_bin=$(command -v tuigreet 2>/dev/null || echo "/usr/bin/tuigreet")
-
-            if [ ! -x "$niri_bin" ]; then
-                log_warn "Binário do niri não encontrado em '$niri_bin'. Verifique se o niri foi instalado."
-            fi
-            if [ ! -x "$tuigreet_bin" ]; then
-                log_error "Binário do tuigreet não encontrado. Instale o pacote greetd-tuigreet antes de continuar."
-                return 1
-            fi
-
-            # Criar a configuração do greetd com caminhos absolutos e variáveis
-            # de ambiente obrigatórias para sessões Wayland em TTY puro
-            sudo tee /etc/greetd/config.toml > /dev/null <<EOF
-[default_session]
-command = "$tuigreet_bin --time --remember --remember-user-session --cmd $niri_bin"
-user = "greeter"
-
-[initial_session]
-command = "$niri_bin"
-user = "greeter"
-EOF
-
-            # Criar arquivo de variáveis de ambiente para a sessão do greeter
-            # Sem XDG_RUNTIME_DIR definido, o Wayland compositor falha silenciosamente
-            sudo tee /etc/greetd/environments > /dev/null <<EOF
-niri
-bash
-EOF
-
-            # Garantir permissões corretas para o tuigreet salvar o estado (lembrar usuário/sessão)
-            sudo mkdir -p /var/lib/greetd /var/cache/tuigreet
-            if id "greeter" &>/dev/null; then
-                sudo chown -R greeter: /var/lib/greetd /var/cache/tuigreet 2>/dev/null || true
-            else
-                log_warn "Usuário 'greeter' não encontrado. O serviço greetd pode criá-lo ao iniciar."
-            fi
-            log_success "greetd com tuigreet configurado com sucesso!"
-        fi
-    fi
-}
 
 enable_systemd_services() {
-    local dm_choice="$1"
-
     # NOTA: Habilitação de serviços é obrigatória — sem DM habilitado o sistema
     # inicia no TTY (multi-user.target), que é exatamente o bug que queremos evitar.
     log_info "Habilitando serviços essenciais no systemd..."
 
     # Lista padrão de serviços que sempre devem ser ativados se existirem
-    local services=(NetworkManager bluetooth power-profiles-daemon)
+    local services=(NetworkManager bluetooth power-profiles-daemon sddm)
 
     # DMs conhecidos que podem conflitar entre si
     local all_known_dms=(sddm greetd lightdm gdm ly lemurs emptty)
 
-    if [ "$dm_choice" == "1" ]; then
-        services+=(sddm)
-    elif [ "$dm_choice" == "2" ]; then
-        services+=(greetd)
-    fi
-
     # Desabilitar TODOS os DMs concorrentes para evitar conflitos
-    local chosen_dm=""
-    [ "$dm_choice" == "1" ] && chosen_dm="sddm"
-    [ "$dm_choice" == "2" ] && chosen_dm="greetd"
+    local chosen_dm="sddm"
 
     if [ -n "$chosen_dm" ]; then
         for other_dm in "${all_known_dms[@]}"; do
@@ -154,16 +90,14 @@ enable_systemd_services() {
     done
 
     # Garantir que o alvo padrão do systemd seja o modo gráfico para iniciar o Display Manager
-    if [ "$dm_choice" == "1" ] || [ "$dm_choice" == "2" ]; then
-        log_info "Definindo o alvo padrão do systemd como gráfico (graphical.target)..."
-        sudo systemctl set-default graphical.target &>/dev/null || true
+    log_info "Definindo o alvo padrão do systemd como gráfico (graphical.target)..."
+    sudo systemctl set-default graphical.target &>/dev/null || true
 
-        # Confirmar que o target foi definido
-        local current_target
-        current_target=$(systemctl get-default 2>/dev/null)
-        if [ "$current_target" != "graphical.target" ]; then
-            log_error "Falha ao definir graphical.target! Target atual: $current_target"
-        fi
+    # Confirmar que o target foi definido
+    local current_target
+    current_target=$(systemctl get-default 2>/dev/null)
+    if [ "$current_target" != "graphical.target" ]; then
+        log_error "Falha ao definir graphical.target! Target atual: $current_target"
     fi
 
     log_success "Serviços de sistema configurados com sucesso!"
@@ -174,21 +108,10 @@ enable_systemd_services() {
 # Detecta problemas que impediriam o DM de iniciar no próximo boot
 # ─────────────────────────────────────────────────────────────
 verify_display_manager() {
-    local dm_choice="$1"
-    local repo_dir="$2"
+    local repo_dir="$1"
 
-    if [ "$dm_choice" == "3" ]; then
-        return 0
-    fi
-
-    local dm_name dm_service
-    if [ "$dm_choice" == "1" ]; then
-        dm_name="SDDM"
-        dm_service="sddm"
-    else
-        dm_name="greetd"
-        dm_service="greetd"
-    fi
+    local dm_name="SDDM"
+    local dm_service="sddm"
 
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
@@ -269,8 +192,7 @@ verify_display_manager() {
     fi
 
     # ── 5. Verificações específicas ───────────────────────────
-    if [ "$dm_choice" == "1" ]; then
-        # ── SDDM ──
+    # ── SDDM ──
         # 5a. Binário do SDDM
         log_info "5/6 — Verificando binário sddm..."
         if command -v sddm &>/dev/null; then
@@ -340,25 +262,6 @@ verify_display_manager() {
         else
             log_info "  Tema SilentSDDM não instalado (será usado o tema padrão do SDDM)."
         fi
-
-    elif [ "$dm_choice" == "2" ]; then
-        # ── greetd ──
-        log_info "5/6 — Verificando configuração do greetd..."
-        if [ -f "/etc/greetd/config.toml" ]; then
-            log_success "Configuração /etc/greetd/config.toml encontrada."
-        else
-            log_error "/etc/greetd/config.toml NÃO encontrada!"
-            errors=$((errors + 1))
-        fi
-
-        log_info "6/6 — Verificando tuigreet..."
-        if command -v tuigreet &>/dev/null; then
-            log_success "tuigreet encontrado: $(command -v tuigreet)"
-        else
-            log_error "tuigreet NÃO encontrado!"
-            errors=$((errors + 1))
-        fi
-    fi
 
     # ── Resultado final ───────────────────────────────────────
     echo ""
@@ -542,4 +445,12 @@ verify_niri_environment() {
         echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
         return 0
     fi
+}
+
+# Função agregadora para configurar o greeter
+setup_greeter() {
+    local repo_dir
+    repo_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
+    configure_display_manager "$repo_dir"
+    enable_systemd_services
 }

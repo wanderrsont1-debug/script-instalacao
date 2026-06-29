@@ -11,4 +11,4 @@ PS1='[\u@\h \W]\$ '
 
 
 # Added by Antigravity CLI installer
-export PATH="/home/wanderson/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"

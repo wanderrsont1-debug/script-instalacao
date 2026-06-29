@@ -23,7 +23,7 @@ install_package_list() {
 
     # Ler pacotes do arquivo, ignorando linhas em branco e comentários
     local packages=()
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         packages+=("$line")
     done < "$package_file"
@@ -87,9 +87,7 @@ install_package_list() {
 # FEDORA — Repositórios COPR
 # ─────────────────────────────────────────────────────────────
 setup_fedora_repos() {
-    local dm_choice="$1"
-
-    if prompt_yes_no "Deseja adicionar os repositórios COPR necessários (dms, ghostty e greeters)?" "S"; then
+    if prompt_yes_no "Deseja adicionar os repositórios COPR necessários (dms, ghostty e zen-browser)?" "S"; then
         log_info "Instalando dnf-plugins-core..."
         sudo dnf install -y dnf-plugins-core
 
@@ -101,11 +99,6 @@ setup_fedora_repos() {
 
         log_info "Habilitando COPR sneexy/zen-browser (Zen Browser)..."
         sudo dnf copr enable -y sneexy/zen-browser
-
-        if [ "$dm_choice" == "2" ]; then
-            log_info "Habilitando COPR alebastr/greetd (tuigreet)..."
-            sudo dnf copr enable -y alebastr/greetd
-        fi
     fi
     return 0
 }
@@ -114,9 +107,7 @@ setup_fedora_repos() {
 # FEDORA — Instalação principal
 # ─────────────────────────────────────────────────────────────
 install_fedora_packages() {
-    local dm_choice="$1"
-
-    setup_fedora_repos "$dm_choice"
+    setup_fedora_repos
 
     if prompt_yes_no "Deseja instalar os pacotes essenciais do ambiente no Fedora?" "S"; then
         log_info "Instalando pacotes essenciais via DNF..."
@@ -178,25 +169,20 @@ install_fedora_packages() {
             libappindicator-gtk3
         )
 
-        # Adicionar Display Manager escolhido
-        if [ "$dm_choice" == "1" ]; then
-            packages+=(
-                sddm
-                sddm-x11
-                qt5-qtgraphicaleffects
-                qt5-qtquickcontrols2
-                qt5-qtvirtualkeyboard
-                qt6-qtsvg
-                qt6-qtvirtualkeyboard
-                qt6-qtmultimedia
-                qt6-qt5compat
-            )
-        elif [ "$dm_choice" == "2" ]; then
-            packages+=(greetd greetd-selinux tuigreet)
-        fi
+        # Adicionar pacotes do SDDM
+        packages+=(
+            sddm
+            sddm-x11
+            qt5-qtgraphicaleffects
+            qt5-qtquickcontrols2
+            qt5-qtvirtualkeyboard
+            qt6-qtsvg
+            qt6-qtvirtualkeyboard
+            qt6-qtmultimedia
+            qt6-qt5compat
+        )
 
-        log_info "Instalando com otimizações de espelho do DNF..."
-        sudo dnf install -y \
+        sudo dnf install -y --skip-broken \
             --setopt=fastestmirror=True \
             --setopt=max_parallel_downloads=10 \
             --setopt=timeout=10 \
@@ -243,24 +229,22 @@ setup_arch_repos() {
 # ARCH — Instalação principal usando arquivos .txt por categoria
 # ─────────────────────────────────────────────────────────────
 install_arch_packages() {
-    local dm_choice="$1"
-    local repo_dir="$2"
+    local repo_dir="$1"
     local pkg_dir="$repo_dir/packages"
 
     setup_arch_repos
 
     log_success "Gerenciador de pacotes: pacman | AUR helper: ${AUR_HELPER:-none}"
 
+    log_info "Sincronizando a base de dados do pacman..."
+    sudo pacman -Sy
+
     if prompt_yes_no "Deseja instalar os pacotes essenciais do ambiente no Arch Linux?" "S"; then
         # 1. Pacotes base do ambiente
         install_package_list "$pkg_dir/arch-base.txt" "Ambiente base (Niri + Apps)"
 
-        # 2. Display Manager
-        if [ "$dm_choice" == "1" ]; then
-            install_package_list "$pkg_dir/arch-sddm.txt" "SDDM e dependências Qt"
-        elif [ "$dm_choice" == "2" ]; then
-            install_package_list "$pkg_dir/arch-greetd.txt" "greetd e tuigreet"
-        fi
+        # 2. Display Manager (SDDM)
+        install_package_list "$pkg_dir/arch-sddm.txt" "SDDM e dependências Qt"
     fi
 
     # 3. Fontes
@@ -285,7 +269,7 @@ install_optional_apps_arch() {
 
     # Ler apps disponíveis do arquivo (ignorando comentários e linhas em branco)
     local available=()
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         available+=("$line")
     done < "$optional_file"
