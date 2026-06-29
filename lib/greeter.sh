@@ -13,7 +13,7 @@ configure_display_manager() {
             # Baixar o tema SilentSDDM se não estiver lá
             if [ ! -d "/usr/share/sddm/themes/silent" ]; then
                 log_info "Clonando tema SilentSDDM do repositório oficial..."
-                sudo git clone https://github.com/uiriansan/SilentSDDM.git /usr/share/sddm/themes/silent
+                sudo git clone https://github.com/uiriansan/SilentSDDM.git /usr/share/sddm/themes/silent || log_warn "Falha ao baixar o tema SilentSDDM."
             else
                 log_info "O tema SilentSDDM já está instalado no sistema."
             fi

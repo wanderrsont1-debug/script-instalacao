@@ -62,9 +62,9 @@ main() {
     log_info "Iniciando instalação do ambiente Niri..."
 
     if [ "${DISTRO}" = "arch" ]; then
-        install_arch_packages "$REPO_DIR" || true
+        install_arch_packages "$REPO_DIR"
     elif [ "${DISTRO}" = "fedora" ]; then
-        install_fedora_packages || true
+        install_fedora_packages
     fi
 
     # Aplicar dotfiles Niri
