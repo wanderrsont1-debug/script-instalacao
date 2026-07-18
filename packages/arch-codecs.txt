@@ -1,0 +1,38 @@
+# Codecs multimídia — reprodução de áudio/vídeo em praticamente qualquer formato
+# Todos verificados nos repositórios oficiais do CachyOS.
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === GStreamer (backend de mídia usado por GTK/GNOME/navegadores) ===
+gst-plugins-base
+gst-plugins-good
+gst-plugins-bad
+gst-plugins-ugly
+gst-libav
+gst-plugin-pipewire
+
+# === Codecs de vídeo ===
+x264
+x265
+libvpx
+dav1d
+aom
+svt-av1
+libtheora
+xvidcore
+libmpeg2
+libdv
+
+# === Codecs de áudio ===
+opus
+flac
+lame
+libvorbis
+faac
+faad2
+a52dec
+libmad
+libdca
+wavpack
+
+# === Aceleração de vídeo por hardware (VA-API) ===
+libva-utils

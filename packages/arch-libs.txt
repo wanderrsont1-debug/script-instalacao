@@ -1,0 +1,34 @@
+# Bibliotecas e utilitários que praticamente todo sistema precisa
+# Todos verificados nos repositórios oficiais do CachyOS.
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === Documentação / conveniência do shell ===
+man-db
+man-pages
+bash-completion
+
+# === Arquivos compactados (zip, rar, 7z, etc.) ===
+7zip
+unzip
+zip
+unrar
+unarchiver
+
+# === Montagem de dispositivos e sistemas de arquivos ===
+gvfs
+gvfs-mtp
+gvfs-smb
+gvfs-nfs
+gvfs-afc
+ntfs-3g
+exfatprogs
+dosfstools
+
+# === Diagnóstico de hardware / sistema ===
+usbutils
+pciutils
+lsof
+
+# === Rede / mirrors / gráficos ===
+reflector
+vulkan-icd-loader

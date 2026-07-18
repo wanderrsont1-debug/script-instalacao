@@ -1,0 +1,4 @@
+// ────────────── Startup Applications (DMS) ──────────────
+// Inicia o Dank Material Shell (Go backend + Quickshell UI)
+
+spawn-at-startup "dms" "run"

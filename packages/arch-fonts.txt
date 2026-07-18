@@ -1,0 +1,11 @@
+# Fontes para o ambiente
+# Nota: ttf-meslo-nerd pode não estar no repositório oficial,
+# o instalador tentará com pacman e fará fallback para download manual
+
+# === Fontes de Interface ===
+noto-fonts
+noto-fonts-emoji
+cantarell-fonts
+
+# === Fontes Nerd (para ícones no terminal) ===
+ttf-meslo-nerd

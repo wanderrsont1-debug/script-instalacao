@@ -1,0 +1,15 @@
+# Aplicativos opcionais — o usuário escolhe quais instalar
+# Formato:  nome-do-pacote | Rótulo amigável exibido no menu
+#   - Tudo após "|" é apenas um texto descritivo mostrado ao usuário.
+#   - Pacotes de repositório oficial e do AUR são detectados automaticamente.
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# Nota: os navegadores agora têm um menu dedicado (packages/arch-browsers.txt).
+
+# === Estudo / Leitura ===
+anki             | Anki (flashcards / repetição espaçada)
+calibre          | Calibre (gerenciador e leitor de e-books)
+
+# === Editores de Código (opcionais) ===
+# zed            | Zed (editor de código)
+# helix          | Helix (editor modal para terminal)

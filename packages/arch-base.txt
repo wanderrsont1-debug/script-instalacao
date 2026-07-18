@@ -1,0 +1,87 @@
+# Pacotes base do ambiente Niri para Arch Linux
+# Compositor + Shell + Terminal + Apps essenciais
+# Linhas em branco e comentários (#) são ignorados pelo instalador
+
+# === Compositor Wayland ===
+niri
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+xdg-desktop-portal-gnome
+
+# === Shell de Desktop ===
+# O shell (DMS ou Noctalia) é instalado condicionalmente pelo instalador,
+# conforme a escolha do usuário — veja install_shell_packages() em lib/packages.sh.
+matugen
+
+# === Terminais ===
+alacritty
+ghostty
+
+# === Launcher e Utilitários Wayland ===
+fuzzel
+wl-clipboard
+grim
+slurp
+
+# === Shell (linha de comando) ===
+fish
+
+# === Editores ===
+micro
+
+# === Monitor / Sistema ===
+btop
+fastfetch
+cava
+
+# === Ferramentas de busca / sistema ===
+ripgrep
+rsync
+playerctl
+git
+
+# === Bluetooth ===
+bluez
+bluez-utils
+
+# === Rede ===
+networkmanager
+
+# === Aplicativos GUI ===
+gnome-disk-utility
+mpv
+keepassxc
+flatpak
+gnome-text-editor
+nautilus
+# firefox foi movido para o menu de navegadores (packages/arch-browsers.txt)
+
+# === Audio (PipeWire) ===
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+pavucontrol
+
+# === Integração de sistema ===
+xdg-utils
+libsecret
+polkit-gnome
+gnome-keyring
+seahorse
+power-profiles-daemon
+ufw
+
+# === Multimídia / Thumbnails ===
+gst-libav
+gst-plugins-good
+gst-plugins-bad
+gst-plugins-ugly
+ffmpeg
+ffmpegthumbnailer
+tumbler
+poppler-glib
+
+# === Compartilhamento / MIME ===
+shared-mime-info
+libappindicator-gtk3

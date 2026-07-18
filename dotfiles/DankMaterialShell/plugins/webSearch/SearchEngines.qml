@@ -1,0 +1,188 @@
+import QtQuick
+
+QtObject {
+    readonly property var engines: [
+        {
+            id: "google",
+            name: "Google",
+            icon: "material:travel_explore",
+            url: "https://www.google.com/search?q=%s",
+            keywords: ["google", "search"]
+        },
+        {
+            id: "duckduckgo",
+            name: "DuckDuckGo",
+            icon: "material:shield",
+            url: "https://duckduckgo.com/?q=%s",
+            keywords: ["ddg", "duckduckgo", "privacy", "search"]
+        },
+        {
+            id: "brave",
+            name: "Brave Search",
+            icon: "material:security",
+            url: "https://search.brave.com/search?q=%s",
+            keywords: ["brave", "privacy", "search"]
+        },
+        {
+            id: "bing",
+            name: "Bing",
+            icon: "material:language",
+            url: "https://www.bing.com/search?q=%s",
+            keywords: ["bing", "microsoft", "search"]
+        },
+        {
+            id: "kagi",
+            name: "Kagi",
+            icon: "material:star_shine",
+            url: "https://kagi.com/search?q=%s",
+            keywords: ["kagi", "privacy", "search"]
+        },
+        {
+            id: "youtube",
+            name: "YouTube",
+            icon: "material:youtube_activity",
+            url: "https://www.youtube.com/results?search_query=%s",
+            keywords: ["youtube", "video", "yt"]
+        },
+        {
+            id: "github",
+            name: "GitHub",
+            icon: "unicode:",
+            url: "https://github.com/search?q=%s",
+            keywords: ["github", "code", "git"]
+        },
+        {
+            id: "stackoverflow",
+            name: "Stack Overflow",
+            icon: "unicode:",
+            url: "https://stackoverflow.com/search?q=%s",
+            keywords: ["stackoverflow", "stack", "coding", "so"]
+        },
+        {
+            id: "reddit",
+            name: "Reddit",
+            icon: "unicode:",
+            url: "https://www.reddit.com/search?q=%s",
+            keywords: ["reddit", "social"]
+        },
+        {
+            id: "wikipedia",
+            name: "Wikipedia",
+            icon: "material:menu_book",
+            url: "https://en.wikipedia.org/wiki/Special:Search?search=%s",
+            keywords: ["wikipedia", "wiki"]
+        },
+        {
+            id: "amazon",
+            name: "Amazon",
+            icon: "material:shopping_cart",
+            url: "https://www.amazon.com/s?k=%s",
+            keywords: ["amazon", "shop", "shopping"]
+        },
+        {
+            id: "ebay",
+            name: "eBay",
+            icon: "material:local_mall",
+            url: "https://www.ebay.com/sch/i.html?_nkw=%s",
+            keywords: ["ebay", "shop", "shopping", "auction"]
+        },
+        {
+            id: "maps",
+            name: "Google Maps",
+            icon: "material:map",
+            url: "https://www.google.com/maps/search/%s",
+            keywords: ["maps", "map", "location", "directions"]
+        },
+        {
+            id: "images",
+            name: "Google Images",
+            icon: "material:photo_library",
+            url: "https://www.google.com/search?tbm=isch&q=%s",
+            keywords: ["images", "image", "img", "pictures", "photos"]
+        },
+        {
+            id: "twitter",
+            name: "Twitter/X",
+            icon: "unicode:",
+            url: "https://twitter.com/search?q=%s",
+            keywords: ["twitter", "x", "social"]
+        },
+        {
+            id: "linkedin",
+            name: "LinkedIn",
+            icon: "unicode:",
+            url: "https://www.linkedin.com/search/results/all/?keywords=%s",
+            keywords: ["linkedin", "job", "professional", "social"]
+        },
+        {
+            id: "imdb",
+            name: "IMDb",
+            icon: "material:movie",
+            url: "https://www.imdb.com/find?q=%s",
+            keywords: ["imdb", "movies", "tv"]
+        },
+        {
+            id: "translate",
+            name: "Google Translate",
+            icon: "material:g_translate",
+            url: "https://translate.google.com/?text=%s",
+            keywords: ["translate", "translation"]
+        },
+        {
+            id: "archlinux",
+            name: "Arch Linux Wiki",
+            icon: "material:terminal",
+            url: "https://wiki.archlinux.org/index.php?search=%s",
+            keywords: ["arch", "archwiki", "linux", "wiki"]
+        },
+        {
+            id: "aur",
+            name: "AUR",
+            icon: "material:package_2",
+            url: "https://aur.archlinux.org/packages?K=%s",
+            keywords: ["aur", "arch", "packages"]
+        },
+        {
+            id: "nixpkgs",
+            name: "Nix Packages",
+            icon: "material:ac_unit",
+            url: "https://search.nixos.org/packages?channel=unstable&query=%s",
+            keywords: ["nixpkgs", "pkgs", "nix", "nixos", "packages"]
+        },
+        {
+            id: "nixopts",
+            name: "NixOS Options",
+            icon: "material:ac_unit",
+            url: "https://search.nixos.org/options?channel=unstable&query=%s",
+            keywords: ["nixopts", "opts", "nixos", "options"]
+        },
+        {
+            id: "npmjs",
+            name: "npm",
+            icon: "material:javascript",
+            url: "https://www.npmjs.com/search?q=%s",
+            keywords: ["npm", "node", "javascript"]
+        },
+        {
+            id: "pypi",
+            name: "PyPI",
+            icon: "material:code",
+            url: "https://pypi.org/search/?q=%s",
+            keywords: ["pypi", "python", "pip"]
+        },
+        {
+            id: "crates",
+            name: "crates.io",
+            icon: "material:inventory_2",
+            url: "https://crates.io/search?q=%s",
+            keywords: ["crates", "rust", "cargo"]
+        },
+        {
+            id: "mdn",
+            name: "MDN Web Docs",
+            icon: "material:code_blocks",
+            url: "https://developer.mozilla.org/en-US/search?q=%s",
+            keywords: ["mdn", "mozilla", "web", "docs"]
+        }
+    ]
+}

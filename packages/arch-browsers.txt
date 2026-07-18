@@ -1,0 +1,11 @@
+# Navegadores — seleção múltipla (escolha um ou mais)
+# Formato:  nome-do-pacote | Rótulo amigável exibido no menu
+# Todos verificados nos repositórios oficiais do CachyOS (repo entre parênteses).
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+firefox             | Firefox (extra) — padrão, código aberto
+zen-browser-bin     | Zen Browser (cachyos) — baseado no Firefox, foco em produtividade
+helium-browser-bin  | Helium Browser (cachyos) — Chromium minimalista e privado
+brave-bin           | Brave (cachyos) — Chromium com bloqueio de anúncios integrado
+librewolf-bin       | LibreWolf (cachyos) — Firefox focado em privacidade
+mullvad-browser-bin | Mullvad Browser (cachyos) — anti-fingerprinting (base Tor)

@@ -1,0 +1,10 @@
+# Pacotes do SDDM e dependências Qt necessárias para o tema SilentSDDM
+sddm
+xorg-server
+qt6-5compat
+qt6-svg
+qt6-virtualkeyboard
+qt6-multimedia
+qt5-graphicaleffects
+qt5-quickcontrols2
+qt5-virtualkeyboard

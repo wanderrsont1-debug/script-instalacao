@@ -1,0 +1,7 @@
+// ────────────── Startup Applications (Noctalia) ──────────────
+// https://github.com/YaLTeR/niri/wiki/Configuration:-Miscellaneous#spawn-at-startup
+//
+// Noctalia Shell BETA (5.x): inicia via binário próprio em modo daemon.
+// (As versões 4.x usavam "qs -c noctalia-shell" — não use isso com a beta.)
+
+spawn-at-startup "noctalia" "--daemon"
