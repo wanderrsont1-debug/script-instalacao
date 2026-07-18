@@ -9,7 +9,41 @@
 # === Estudo / Leitura ===
 anki             | Anki (flashcards / repetição espaçada)
 calibre          | Calibre (gerenciador e leitor de e-books)
+obsidian         | Obsidian (anotações e conhecimento pessoal)
 
-# === Editores de Código (opcionais) ===
-# zed            | Zed (editor de código)
-# helix          | Helix (editor modal para terminal)
+# === Escritório ===
+libreoffice-fresh | LibreOffice (suíte de escritório completa)
+
+# === Imagem / Vídeo / Áudio ===
+gimp             | GIMP (editor de imagens)
+inkscape         | Inkscape (gráficos vetoriais)
+kdenlive         | Kdenlive (editor de vídeo)
+obs-studio       | OBS Studio (gravação de tela e streaming)
+vlc              | VLC (reprodutor multimídia)
+audacity         | Audacity (editor de áudio)
+
+# === Internet / Downloads ===
+qbittorrent      | qBittorrent (cliente torrent)
+localsend        | LocalSend (enviar arquivos na rede local, estilo AirDrop)
+
+# === Música ===
+spotify-launcher | Spotify (cliente oficial via launcher)
+
+# === Jogos ===
+steam            | Steam (requer repositório multilib habilitado)
+
+# === Ferramentas de Sistema ===
+timeshift        | Timeshift (snapshots/restauração do sistema)
+filelight        | Filelight (visualizar uso do disco)
+
+# === CLIs de IA ===
+# claude-code vem do repositório oficial do CachyOS (não é AUR).
+# O Antigravity não está nos repos — usa o instalador oficial do Google
+# via curl (linhas "curl:<url>" são tratadas pelo instalador do menu).
+claude-code      | Claude Code (agente de IA no terminal — repo oficial CachyOS)
+curl:https://antigravity.google/cli/install.sh | Google Antigravity CLI (instalador oficial do Google)
+
+# === Editores de Código ===
+code             | VS Code (Code - OSS, versão open source)
+zed              | Zed (editor de código rápido)
+helix            | Helix (editor modal para terminal)

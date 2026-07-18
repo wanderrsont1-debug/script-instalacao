@@ -63,18 +63,35 @@ select_shell() {
     echo ""
     local reply
     read -p "Sua escolha [1]: " reply
-    reply=${reply:-1}
+    # Remover espaços acidentais — "2 " caía silenciosamente no padrão (DMS)
+    reply="${reply:-1}"
+    reply="${reply//[[:space:]]/}"
 
     case "$reply" in
         2|noctalia|Noctalia|n|N)
             export SHELL_CHOICE="noctalia"
             log_info "Shell selecionado: Noctalia Shell (beta)."
             ;;
-        *)
+        1|dms|DMS|d|D|"")
             export SHELL_CHOICE="dms"
             log_info "Shell selecionado: DankMaterialShell (DMS)."
             ;;
+        *)
+            log_warn "Opção não reconhecida ('$reply') — usando o padrão: DMS."
+            export SHELL_CHOICE="dms"
+            ;;
     esac
+}
+
+# Flags extras para tornar a instalação AUR realmente não-interativa.
+# O paru mostra um prompt de revisão de PKGBUILD/diff mesmo com --noconfirm,
+# a menos que --skipreview seja passado — sem isso o script trava esperando
+# Enter no meio da instalação (parece "travado"/nunca termina), derrubando
+# tudo que viria depois (incluindo a instalação do SDDM).
+aur_noninteractive_flags() {
+    if [ "${AUR_HELPER:-none}" = "paru" ]; then
+        echo "--skipreview"
+    fi
 }
 
 # Detectar o usuário real (mesmo quando executado via sudo)

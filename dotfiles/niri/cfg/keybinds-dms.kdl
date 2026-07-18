@@ -5,8 +5,10 @@ binds {
 
     Mod+Shift+ESCAPE                     { show-hotkey-overlay; }
 
-    // ─── Alternar o shell (Toggle Desktop Shell) ───
-    Mod+Shift+S                         hotkey-overlay-title="Toggle Desktop Shell" { spawn "shell-switch"; }
+    // ─── Central de Controle (Control Center) ───
+    // Mesma tecla e mesma função do Noctalia (paridade de keybinds entre os shells).
+    // Antes chamava "shell-switch", um comando que não existe no sistema.
+    Mod+Shift+S                         hotkey-overlay-title="Toggle Control Center" { spawn "dms" "ipc" "call" "control-center" "toggle"; }
 
     // ─── Applications ───
     Mod+Return                          hotkey-overlay-title="Open Terminal: Ghostty" { spawn "ghostty"; }

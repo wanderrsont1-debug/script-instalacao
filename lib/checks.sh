@@ -143,6 +143,20 @@ run_all_checks() {
 
         # Detectar e exportar AUR helper
         AUR_HELPER=$(detect_aur_helper)
+
+        # Sem helper? No CachyOS o paru existe como pacote binário no repo
+        # oficial — dá para instalar via pacman, sem compilar nada.
+        if [ "$AUR_HELPER" = "none" ] && pacman -Si paru &>/dev/null; then
+            if prompt_yes_no "Nenhum AUR helper encontrado. Instalar o 'paru' agora via pacman (repo CachyOS)?" "S"; then
+                if sudo pacman -S --needed --noconfirm paru; then
+                    AUR_HELPER="paru"
+                    log_success "paru instalado — pacotes AUR habilitados."
+                else
+                    log_warn "Falha ao instalar o paru."
+                fi
+            fi
+        fi
+
         export AUR_HELPER
         if [ "$AUR_HELPER" = "none" ]; then
             log_warn "Continuando sem AUR helper. Pacotes AUR serão ignorados."

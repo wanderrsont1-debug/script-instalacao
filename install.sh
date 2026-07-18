@@ -12,6 +12,7 @@
 # ═══════════════════════════════════════════════════════════════
 
 set -e          # Interrompe imediatamente se qualquer comando falhar
+set -E          # Faz o trap ERR valer também dentro de funções e subshells
 set -o pipefail # Propaga falhas em pipes
 
 # Obter diretório do repositório
@@ -19,6 +20,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source das bibliotecas modulares
 source "$REPO_DIR/lib/utils.sh"
+
+# NUNCA morrer em silêncio: se o 'set -e' for interromper o instalador, este
+# trap imprime exatamente onde e por quê. Antes disso, uma falha inesperada
+# encerrava o script sem NENHUMA mensagem — parecia que ele tinha "terminado",
+# mas etapas inteiras (shell escolhido, tema, SDDM) nunca rodavam.
+trap 'log_error "FALHA FATAL em ${BASH_SOURCE[0]##*/}:${LINENO} — comando: ${BASH_COMMAND}"; log_error "A instalação foi INTERROMPIDA aqui. Etapas seguintes NÃO foram executadas."' ERR
 source "$REPO_DIR/lib/checks.sh"
 source "$REPO_DIR/lib/packages.sh"
 source "$REPO_DIR/lib/dotfiles.sh"
@@ -61,7 +68,7 @@ main() {
     select_shell
 
     # Snapshot do sistema ANTES de qualquer instalação pesada (item 6)
-    create_pre_install_snapshot
+    create_pre_install_snapshot || log_warn "Snapshot pré-instalação falhou — continuando."
 
     # ── Instalar Niri ────────────────────────────────────────
     # A instalação do Niri usa as funções já existentes no repo
@@ -79,23 +86,25 @@ main() {
     fi
 
     # Aplicar dotfiles Niri
+    # Guardas '|| log_warn': nenhuma falha de dotfile pode impedir as etapas
+    # críticas seguintes (configuração do SDDM e habilitação do boot gráfico).
     if [ -d "$REPO_DIR/dotfiles" ]; then
-        backup_existing_configs
-        deploy_dotfiles "$REPO_DIR"
+        backup_existing_configs || log_warn "Backup de ~/.config falhou — continuando."
+        deploy_dotfiles "$REPO_DIR" || log_warn "Falha ao implantar dotfiles — revise os avisos acima."
         # Apontar o Niri para o shell escolhido (DMS ou Noctalia)
-        apply_shell_config
+        apply_shell_config || log_warn "Falha ao apontar o Niri para o shell escolhido."
     fi
 
-    # Configurar greeter/DM
+    # Configurar greeter/DM — etapa mais crítica: garante boot gráfico.
     if declare -f setup_greeter &>/dev/null; then
-        setup_greeter
+        setup_greeter || log_warn "Configuração do SDDM terminou com avisos — veja a verificação final."
     fi
 
     log_success "Ambiente Niri instalado."
 
     # Configurações finais do sistema (grupos, Flathub, firewall UFW)
     if declare -f configure_system_post &>/dev/null; then
-        configure_system_post
+        configure_system_post || log_warn "Configurações finais do sistema tiveram falhas."
     fi
 
     # Executar verificações finais de integridade do ambiente

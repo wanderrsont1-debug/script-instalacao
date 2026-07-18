@@ -105,8 +105,14 @@ deploy_dotfiles() {
         if [ -d "$dir" ]; then
             # grep -rl: lista apenas arquivos que contêm o padrão (sem imprimir linhas)
             # xargs sed -i: substitui in-place em cada arquivo encontrado
+            #
+            # '|| true' é OBRIGATÓRIO: quando um diretório não contém nenhum
+            # caminho hardcoded, o grep retorna 1 e — com 'set -e' + 'set -o
+            # pipefail' ativos — o instalador inteiro MORRIA silenciosamente
+            # aqui, antes de configurar o shell escolhido, o tema e o SDDM.
+            # (Era exatamente este o bug do "SDDM nunca instala".)
             grep -rl --null "/home/wanderson" "$dir" 2>/dev/null \
-                | xargs -0 --no-run-if-empty sed -i "s|/home/wanderson|${user_home}|g"
+                | xargs -0 --no-run-if-empty sed -i "s|/home/wanderson|${user_home}|g" || true
         fi
     done
 
@@ -173,21 +179,32 @@ apply_shell_config() {
         return 0
     fi
 
-    if [ "$choice" = "noctalia" ]; then
-        log_info "Configurando o Niri para usar o Noctalia Shell..."
-        [ -f "$autostart" ] && sed -i 's|autostart-dms\.kdl|autostart-noctalia.kdl|g' "$autostart"
-        [ -f "$keybinds" ]  && sed -i 's|keybinds-dms\.kdl|keybinds-noctalia.kdl|g'   "$keybinds"
-        log_success "Niri apontado para os configs do Noctalia (autostart + keybinds)."
-    else
-        log_info "Configurando o Niri para usar o DankMaterialShell (DMS)..."
-        # Garante o estado DMS mesmo se os arquivos vierem de uma execução anterior com Noctalia.
-        [ -f "$autostart" ] && sed -i 's|autostart-noctalia\.kdl|autostart-dms.kdl|g' "$autostart"
-        [ -f "$keybinds" ]  && sed -i 's|keybinds-noctalia\.kdl|keybinds-dms.kdl|g'   "$keybinds"
-        log_success "Niri apontado para os configs do DMS (autostart + keybinds)."
+    # Escrever o include diretamente (em vez de 'sed' sobre o conteúdo antigo):
+    # funciona independente do estado anterior dos arquivos — mesmo se uma
+    # execução passada tiver sido interrompida no meio e deixado o par
+    # autostart/keybinds apontando para o shell errado.
+    local suffix="dms"
+    [ "$choice" = "noctalia" ] && suffix="noctalia"
+
+    log_info "Configurando o Niri para usar o shell: ${choice}..."
+    echo "include \"./autostart-${suffix}.kdl\"" > "$autostart"
+    echo "include \"./keybinds-${suffix}.kdl\""  > "$keybinds"
+
+    # Confirmar que os arquivos-alvo dos includes existem
+    local missing=0
+    for f in "$cfg_dir/autostart-${suffix}.kdl" "$cfg_dir/keybinds-${suffix}.kdl"; do
+        if [ ! -f "$f" ]; then
+            log_error "Arquivo de config do shell ausente: $f"
+            missing=1
+        fi
+    done
+    if [ "$missing" -eq 0 ]; then
+        log_success "Niri apontado para os configs do ${choice} (autostart + keybinds)."
     fi
 
     # Ajustar propriedade (caso rodando via sudo)
     local real_user
     real_user=$(detect_user)
     chown "$real_user":"$real_user" "$autostart" "$keybinds" 2>/dev/null || true
+    return 0
 }

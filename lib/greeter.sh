@@ -41,7 +41,14 @@ ensure_sddm_installed() {
         else
             # -S (sem -y): a base já foi sincronizada com -Syu antes. Na 2ª
             # tentativa forçamos um -Sy para o caso de a base estar defasada.
-            if [ "$attempt" -ge 2 ]; then
+            # Na 3ª tentativa adicionamos --overwrite '*' — causa comum e
+            # silenciosa de falha repetida é conflito de arquivo (ex.: sddm
+            # tentando instalar um arquivo que já existe no sistema), que
+            # --noconfirm sozinho NÃO resolve e faz o pacman abortar a
+            # transação inteira sempre do mesmo jeito.
+            if [ "$attempt" -ge 3 ]; then
+                sudo pacman -Sy --needed --noconfirm --overwrite '*' sddm || true
+            elif [ "$attempt" -ge 2 ]; then
                 sudo pacman -Sy --needed --noconfirm sddm || true
             else
                 sudo pacman -S --needed --noconfirm sddm || true
@@ -72,14 +79,41 @@ ensure_sddm_installed() {
 
 configure_display_manager() {
     local repo_dir="$1"
-    
+    local theme_dst="/usr/share/sddm/themes/silent"
+
     if prompt_yes_no "Deseja configurar o SDDM e instalar o tema Silent?" "S"; then
             log_info "Instalando e configurando o tema Silent no SDDM..."
-            
-            # Baixar o tema SilentSDDM se não estiver lá
-            if [ ! -d "/usr/share/sddm/themes/silent" ]; then
-                log_info "Clonando tema SilentSDDM do repositório oficial..."
-                sudo git clone https://github.com/uiriansan/SilentSDDM.git /usr/share/sddm/themes/silent || log_warn "Falha ao baixar o tema SilentSDDM."
+
+            # Procurar uma cópia LOCAL do SilentSDDM antes de tentar baixar da
+            # internet. Isso evita depender de rede/git (comum logo após instalar
+            # em TTY) e resolve o bug de o diretório do tema ficar parcial/vazio
+            # de uma tentativa anterior e nunca mais ser reparado (o antigo check
+            # só olhava se o diretório existia, não se o tema estava completo).
+            local silent_src=""
+            local candidate
+            for candidate in \
+                "${SILENT_SDDM_SRC:-}" \
+                "$(dirname "$repo_dir")/SilentSDDM-main" \
+                "$(get_user_home)/Downloads/SilentSDDM-main" \
+                "$(get_user_home)/SilentSDDM-main"
+            do
+                if [ -n "$candidate" ] && [ -f "$candidate/Main.qml" ]; then
+                    silent_src="$candidate"
+                    break
+                fi
+            done
+
+            if [ -n "$silent_src" ]; then
+                log_info "Usando cópia local do SilentSDDM em: $silent_src"
+                sudo mkdir -p "$theme_dst"
+                sudo cp -rf "$silent_src"/. "$theme_dst/"
+            elif [ ! -f "$theme_dst/Main.qml" ]; then
+                log_info "Cópia local não encontrada — clonando tema SilentSDDM do repositório oficial..."
+                # Remove qualquer diretório parcial/quebrado de uma tentativa anterior
+                # antes de clonar — 'git clone' falha se o destino já existir e não
+                # estiver vazio.
+                sudo rm -rf "$theme_dst"
+                sudo git clone https://github.com/uiriansan/SilentSDDM.git "$theme_dst" || log_warn "Falha ao baixar o tema SilentSDDM."
             else
                 log_info "O tema SilentSDDM já está instalado no sistema."
             fi
@@ -87,7 +121,16 @@ configure_display_manager() {
             # O tema só é considerado válido se o Main.qml existir. Sem isso, apontar
             # o sddm.conf para "Current=silent" resultaria em greeter quebrado no boot.
             local theme_ok=false
-            [ -f "/usr/share/sddm/themes/silent/Main.qml" ] && theme_ok=true
+            [ -f "$theme_dst/Main.qml" ] && theme_ok=true
+
+            # As fontes do tema (Red Hat Text) precisam ser copiadas para
+            # /usr/share/fonts/ separadamente — sem isso o greeter carrega mas usa
+            # uma fonte de fallback (o install.sh oficial do SilentSDDM faz o mesmo).
+            if $theme_ok && [ -d "$theme_dst/fonts" ]; then
+                log_info "Instalando fontes do tema SilentSDDM..."
+                sudo cp -r "$theme_dst"/fonts/. /usr/share/fonts/ 2>/dev/null \
+                    && command -v fc-cache &>/dev/null && sudo fc-cache -f &>/dev/null
+            fi
 
             # Aplicar configurações do SDDM copiadas do diretório do script
             if [ -d "$repo_dir/system" ]; then

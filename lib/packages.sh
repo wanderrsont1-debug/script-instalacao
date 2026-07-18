@@ -74,7 +74,7 @@ install_package_list() {
             local failed=()
             for pkg in "${aur[@]}"; do
                 log_info "  AUR: $pkg"
-                if ! "$AUR_HELPER" -S --needed --noconfirm "$pkg"; then
+                if ! "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$pkg"; then
                     log_warn "  Falha ao instalar AUR: $pkg"
                     failed+=("$pkg")
                 else
@@ -90,6 +90,24 @@ install_package_list() {
 
     log_success "$description instalados com sucesso."
     return 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# Fallback: compilar noctalia-git direto do AUR com makepkg
+# (método "Non-AUR Helper" da documentação oficial do Noctalia).
+# Usado quando não há AUR helper ou quando o helper falhou.
+# ─────────────────────────────────────────────────────────────
+install_noctalia_makepkg() {
+    log_info "  Fallback: clonando AUR e compilando com makepkg (método oficial sem helper)..."
+    local build_dir
+    build_dir=$(mktemp -d)
+    if git clone https://aur.archlinux.org/noctalia-git.git "$build_dir/noctalia-git" \
+        && ( cd "$build_dir/noctalia-git" && makepkg -si --needed --noconfirm ); then
+        rm -rf "$build_dir"
+        return 0
+    fi
+    rm -rf "$build_dir"
+    return 1
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -124,12 +142,15 @@ install_shell_packages() {
         # 2ª opção: AUR noctalia-git (versão de desenvolvimento, também beta 5.x).
         if [ "${AUR_HELPER:-none}" != "none" ]; then
             log_info "  Instalando 'noctalia-git' via ${AUR_HELPER}..."
-            "$AUR_HELPER" -S --needed --noconfirm noctalia-git \
+            "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) noctalia-git \
                 && { log_success "Noctalia (noctalia-git) instalado via AUR."; return 0; }
-            log_warn "  Falha ao instalar noctalia-git via AUR."
+            log_warn "  Falha ao instalar noctalia-git via ${AUR_HELPER} — tentando makepkg direto."
         else
-            log_warn "  Sem AUR helper e 'noctalia' indisponível no repo — não foi possível instalar o Noctalia."
+            log_warn "  Sem AUR helper — tentando compilar direto do AUR com makepkg."
         fi
+        # 3ª opção: makepkg direto (não depende de helper nenhum).
+        install_noctalia_makepkg \
+            && { log_success "Noctalia (noctalia-git) instalado via makepkg."; return 0; }
         log_error "Não foi possível instalar o Noctalia. Instale manualmente: paru -S noctalia-git"
         return 1
     fi
@@ -141,7 +162,7 @@ install_shell_packages() {
             && { log_success "DMS instalado via pacman."; return 0; }
     fi
     if [ "${AUR_HELPER:-none}" != "none" ]; then
-        "$AUR_HELPER" -S --needed --noconfirm dms-shell \
+        "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) dms-shell \
             && { log_success "DMS instalado via AUR."; return 0; }
     fi
     log_error "Não foi possível instalar o DMS (dms-shell)."
@@ -310,11 +331,15 @@ install_arch_packages() {
         # 1. Pacotes base do ambiente
         install_package_list "$pkg_dir/arch-base.txt" "Ambiente base (Niri + Apps)"
 
-        # 2. Desktop Shell escolhido (DMS ou Noctalia beta)
-        install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
-
-        # 3. Display Manager (SDDM)
+        # 2. Display Manager (SDDM) — instalado ANTES do shell de propósito.
+        # O Noctalia (AUR) pode falhar/travar numa build longa; se isso vier
+        # primeiro e o usuário precisar interromper o script, o SDDM nunca
+        # chegaria a ser instalado. Com o SDDM primeiro, o sistema já entra
+        # em modo gráfico no próximo boot mesmo que o shell falhe depois.
         install_package_list "$pkg_dir/arch-sddm.txt" "SDDM e dependências Qt"
+
+        # 3. Desktop Shell escolhido (DMS ou Noctalia beta)
+        install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
     fi
 
     # 3. Fontes
@@ -424,11 +449,26 @@ select_and_install_menu() {
 
     log_info "Instalando itens selecionados..."
     for app in "${selected[@]}"; do
+        # Entradas "curl:<url>" usam o instalador oficial do próprio programa
+        # (curl | bash) em vez de pacman/AUR — para ferramentas que não estão
+        # nos repositórios oficiais e cujo AUR o usuário prefere evitar.
+        if [[ "$app" == curl:* ]]; then
+            local url="${app#curl:}"
+            log_info "Executando instalador oficial: curl -fsSL $url | bash"
+            if curl -fsSL "$url" | bash; then
+                log_success "Instalador oficial concluído."
+                log_info "  Se o comando não for encontrado, abra um novo terminal (instala em ~/.local/bin ou similar)."
+            else
+                log_warn "Falha no instalador oficial: $url"
+            fi
+            continue
+        fi
+
         log_info "Instalando: $app"
         if pacman -Si "$app" &>/dev/null 2>&1; then
             sudo pacman -S --needed --noconfirm "$app" && log_success "$app instalado" || log_warn "Falha ao instalar $app"
         elif [ "${AUR_HELPER:-none}" != "none" ]; then
-            "$AUR_HELPER" -S --needed --noconfirm "$app" && log_success "$app instalado" || log_warn "Falha ao instalar AUR: $app"
+            "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$app" && log_success "$app instalado" || log_warn "Falha ao instalar AUR: $app"
         else
             log_warn "$app é um pacote AUR e nenhum AUR helper está disponível. Pulando."
         fi
