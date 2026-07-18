@@ -21,11 +21,20 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source das bibliotecas modulares
 source "$REPO_DIR/lib/utils.sh"
 
+# ── Arquivo de log da instalação ─────────────────────────────
+# Toda a saída (tela + erros) é duplicada para um arquivo em logs/,
+# com os códigos de cor removidos. Em caso de problema, basta enviar
+# o log mais recente para diagnóstico.
+LOG_DIR="$REPO_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/install-$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee >(sed -u $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' >> "$LOG_FILE")) 2>&1
+
 # NUNCA morrer em silêncio: se o 'set -e' for interromper o instalador, este
 # trap imprime exatamente onde e por quê. Antes disso, uma falha inesperada
 # encerrava o script sem NENHUMA mensagem — parecia que ele tinha "terminado",
 # mas etapas inteiras (shell escolhido, tema, SDDM) nunca rodavam.
-trap 'log_error "FALHA FATAL em ${BASH_SOURCE[0]##*/}:${LINENO} — comando: ${BASH_COMMAND}"; log_error "A instalação foi INTERROMPIDA aqui. Etapas seguintes NÃO foram executadas."' ERR
+trap 'log_error "FALHA FATAL em ${BASH_SOURCE[0]##*/}:${LINENO} — comando: ${BASH_COMMAND}"; log_error "A instalação foi INTERROMPIDA aqui. Etapas seguintes NÃO foram executadas."; log_error "Log completo salvo em: ${LOG_FILE}"' ERR
 source "$REPO_DIR/lib/checks.sh"
 source "$REPO_DIR/lib/packages.sh"
 source "$REPO_DIR/lib/dotfiles.sh"
@@ -58,6 +67,9 @@ show_welcome() {
 # MAIN — Ponto de entrada
 # ─────────────────────────────────────────────────────────────
 main() {
+    log_info "Registrando toda a instalação em: $LOG_FILE"
+    echo ""
+
     # Verificações iniciais
     run_all_checks || exit 1
 
@@ -117,6 +129,7 @@ main() {
 
     echo ""
     log_success "Instalação concluída! Reinicie o sistema para aplicar as mudanças."
+    log_info "Log completo desta instalação: $LOG_FILE"
     echo ""
 }
 
