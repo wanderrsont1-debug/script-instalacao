@@ -63,6 +63,31 @@ flatpak_install() {
     sudo flatpak install -y --noninteractive flathub "$app_id"
 }
 
+# Adicionar um repositório .repo externo (Fedora) e instalar o pacote.
+# Formato da entrada: repo:<pacote>@<url-do-.repo>
+#
+# O arquivo é baixado direto para /etc/yum.repos.d/ em vez de usar o
+# 'dnf config-manager': a sintaxe dele mudou entre o dnf4 e o dnf5
+# ('--add-repo' virou 'addrepo --from-repofile'), e baixar o arquivo funciona
+# igual nas duas versões.
+repo_install() {
+    local spec="$1"
+    local pkg="${spec%%@*}"
+    local url="${spec#*@}"
+
+    if [ "${DISTRO:-arch}" != "fedora" ]; then
+        log_warn "  Entrada 'repo:' ignorada fora do Fedora: $spec"
+        return 1
+    fi
+
+    log_info "  Adicionando repositório de ${pkg}..."
+    if ! sudo curl -fsSL "$url" -o "/etc/yum.repos.d/${pkg}.repo"; then
+        log_warn "  Falha ao baixar o repositório: $url"
+        return 1
+    fi
+    sudo dnf install -y "$pkg"
+}
+
 # Habilitar um repositório COPR (Fedora) e instalar o pacote indicado.
 copr_install() {
     local spec="$1"              # <dono>/<projeto>:<pacote>
@@ -120,6 +145,10 @@ install_entry() {
             ;;
         copr:*)
             copr_install "${app#copr:}"
+            return $?
+            ;;
+        repo:*)
+            repo_install "${app#repo:}"
             return $?
             ;;
     esac
