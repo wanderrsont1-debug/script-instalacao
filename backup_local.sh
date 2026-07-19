@@ -7,7 +7,7 @@ mkdir -p "$REPO_DIR/dotfiles"
 mkdir -p "$REPO_DIR/system"
 
 # Copy .config folders
-for folder in niri DankMaterialShell alacritty ghostty fuzzel cava micro environment.d fish; do
+for folder in niri hypr DankMaterialShell alacritty ghostty fuzzel cava micro environment.d fish; do
     if [ -d "$HOME/.config/$folder" ]; then
         echo "Copying ~/.config/$folder..."
         mkdir -p "$REPO_DIR/dotfiles/$folder"

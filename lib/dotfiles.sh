@@ -73,11 +73,23 @@ deploy_dotfiles() {
     # Garantir que o diretório ~/.config existe
     mkdir -p "$config_dir"
 
+    # Compositor escolhido — implantamos APENAS os dotfiles do compositor
+    # selecionado (niri OU hypr), evitando poluir ~/.config com a config do outro.
+    local compositor="${COMPOSITOR_CHOICE:-niri}"
+
     # 1. Copiar pastas e arquivos que vão para ~/.config/
     for item in "$dotfiles_src"/*; do
         [ -e "$item" ] || continue
         local name
         name=$(basename "$item")
+
+        # Pular o diretório do compositor NÃO escolhido.
+        if [ "$name" = "niri" ] && [ "$compositor" != "niri" ]; then
+            continue
+        fi
+        if [ "$name" = "hypr" ] && [ "$compositor" != "hyprland" ]; then
+            continue
+        fi
 
         # Ignorar arquivos que vão para a raiz do $HOME (tratados no passo 2)
         if [[ "$name" != .bashrc && "$name" != .zshrc && "$name" != .bash_profile && "$name" != .Xresources ]]; then
@@ -100,6 +112,7 @@ deploy_dotfiles() {
         "$config_dir/DankMaterialShell"
         "$config_dir/fish"
         "$config_dir/niri"
+        "$config_dir/hypr"
     )
     for dir in "${target_dirs[@]}"; do
         if [ -d "$dir" ]; then
@@ -142,6 +155,7 @@ deploy_dotfiles() {
     log_info "Ajustando propriedade dos arquivos para o usuário $real_user..."
     chown -R "$real_user":"$real_user" \
         "$config_dir/niri" \
+        "$config_dir/hypr" \
         "$config_dir/DankMaterialShell" \
         "$config_dir/alacritty" \
         "$config_dir/cava" \

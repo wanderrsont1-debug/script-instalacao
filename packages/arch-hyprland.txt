@@ -1,0 +1,16 @@
+# Pacotes específicos do compositor Hyprland (Arch/CachyOS)
+# Instalado apenas quando o usuário escolhe o Hyprland em select_compositor().
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+#
+# OBS.: a config incluída (dotfiles/hypr/hyprland.lua) usa o novo formato Lua
+# do Hyprland (API hl.*), disponível a partir do Hyprland 0.5x. Os repositórios
+# do Arch/CachyOS já entregam uma versão compatível.
+
+hyprland
+# Portal do XDG específico do Hyprland (screencast/screenshot/compartilhamento de tela)
+xdg-desktop-portal-hyprland
+# Diálogos/utilitários GUI usados por alguns componentes do Hyprland
+# (antigo 'hyprland-qtutils', renomeado nos repos para 'hyprland-guiutils')
+hyprland-guiutils
+# 'jq' é usado pelo atalho de screenshot de janela ativa (hyprctl activewindow -j | jq ...)
+jq

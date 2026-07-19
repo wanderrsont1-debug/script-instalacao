@@ -1,12 +1,14 @@
-# Pacotes base do ambiente Niri para Arch Linux
-# Compositor + Shell + Terminal + Apps essenciais
+# Pacotes base COMUNS do ambiente (Arch Linux) — independentes do compositor
+# Shell + Terminal + Apps essenciais compartilhados por Niri e Hyprland.
+# O compositor em si (niri / hyprland) é instalado à parte, conforme a escolha
+# do usuário — veja packages/arch-niri.txt e packages/arch-hyprland.txt.
 # Linhas em branco e comentários (#) são ignorados pelo instalador
 
-# === Compositor Wayland ===
-niri
+# === Base do XDG Desktop Portal (comum aos dois compositores) ===
+# O portal específico do compositor (gnome p/ Niri, hyprland p/ Hyprland)
+# é instalado junto do compositor escolhido.
 xdg-desktop-portal
 xdg-desktop-portal-gtk
-xdg-desktop-portal-gnome
 
 # === Shell de Desktop ===
 # O shell (DMS ou Noctalia) é instalado condicionalmente pelo instalador,

@@ -50,10 +50,59 @@ prompt_yes_no() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# Escolha do Compositor Wayland: Niri ou Hyprland
+# Exporta COMPOSITOR_CHOICE=niri|hyprland (padrão: niri).
+#
+# O padrão é 'niri' para preservar o comportamento histórico do projeto.
+# O Hyprland usa a config Lua incluída em dotfiles/hypr/hyprland.lua, que já
+# vem cabeada para o Noctalia Shell (autostart "noctalia --daemon" + IPC).
+# ─────────────────────────────────────────────────────────────
+select_compositor() {
+    echo ""
+    echo -e "${BLUE}===============================================${NC}"
+    echo -e "${YELLOW}          Escolha do Compositor Wayland${NC}"
+    echo -e "${BLUE}===============================================${NC}"
+    echo -e "  ${GREEN}1${NC}) Niri      — compositor scrollable-tiling (padrão do projeto)"
+    echo -e "  ${GREEN}2${NC}) Hyprland  — compositor dinâmico (config Lua + Noctalia Shell)"
+    echo ""
+    local reply
+    read -p "Sua escolha [1]: " reply
+    reply="${reply:-1}"
+    reply="${reply//[[:space:]]/}"
+
+    case "$reply" in
+        2|hyprland|Hyprland|hypr|h|H)
+            export COMPOSITOR_CHOICE="hyprland"
+            log_info "Compositor selecionado: Hyprland."
+            ;;
+        1|niri|Niri|"")
+            export COMPOSITOR_CHOICE="niri"
+            log_info "Compositor selecionado: Niri."
+            ;;
+        *)
+            log_warn "Opção não reconhecida ('$reply') — usando o padrão: Niri."
+            export COMPOSITOR_CHOICE="niri"
+            ;;
+    esac
+}
+
+# ─────────────────────────────────────────────────────────────
 # Escolha do Desktop Shell: DankMaterialShell (DMS) ou Noctalia (beta)
 # Exporta SHELL_CHOICE=dms|noctalia (padrão: dms).
+#
+# Depende de COMPOSITOR_CHOICE. Para o Hyprland, a config Lua incluída usa o
+# Noctalia (autostart e keybinds via 'noctalia msg'); portanto o shell é
+# fixado em 'noctalia' sem apresentar o menu, para não gerar uma combinação
+# incoerente (ex.: DMS com keybinds do Noctalia).
 # ─────────────────────────────────────────────────────────────
 select_shell() {
+    # Hyprland: a config fornecida é cabeada para o Noctalia — fixar sem perguntar.
+    if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
+        export SHELL_CHOICE="noctalia"
+        log_info "Shell definido automaticamente como Noctalia (a config do Hyprland incluída usa o Noctalia)."
+        return 0
+    fi
+
     echo ""
     echo -e "${BLUE}===============================================${NC}"
     echo -e "${YELLOW}          Escolha do Desktop Shell${NC}"

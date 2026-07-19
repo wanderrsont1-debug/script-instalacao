@@ -2,7 +2,8 @@
 # ═══════════════════════════════════════════════════════════════
 # Instalador Unificado de Ambiente — Arch Linux / Fedora
 # Ambientes suportados:
-#   - Niri (DankMaterialShell)
+#   - Niri (DMS ou Noctalia)
+#   - Hyprland (Noctalia, config Lua)
 #
 # Melhorias baseadas no donarch (GitLab):
 #   - checks.sh dedicado (detecção de distro, AUR helper, pacotes base)
@@ -50,7 +51,8 @@ show_welcome() {
     echo -e "${GREEN}║       Instalador Unificado de Ambiente           ║${NC}"
     echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║  Suporta: Arch Linux / CachyOS / Fedora          ║${NC}"
-    echo -e "${CYAN}║  Ambiente: Niri + (DMS ou Noctalia beta)         ║${NC}"
+    echo -e "${CYAN}║  Compositor: Niri ou Hyprland                    ║${NC}"
+    echo -e "${CYAN}║  Shell: DMS ou Noctalia                          ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -76,16 +78,24 @@ main() {
     # Boas-vindas
     show_welcome
 
+    # Escolha do Compositor Wayland (Niri ou Hyprland) — define COMPOSITOR_CHOICE
+    select_compositor
+
     # Escolha do Desktop Shell (DMS ou Noctalia beta) — define SHELL_CHOICE
+    # (para Hyprland, é fixado em Noctalia automaticamente — veja select_shell)
     select_shell
 
     # Snapshot do sistema ANTES de qualquer instalação pesada (item 6)
     create_pre_install_snapshot || log_warn "Snapshot pré-instalação falhou — continuando."
 
-    # ── Instalar Niri ────────────────────────────────────────
-    # A instalação do Niri usa as funções já existentes no repo
-    # (packages.sh, dotfiles.sh, greeter.sh)
-    log_info "Iniciando instalação do ambiente Niri..."
+    # ── Instalar o compositor escolhido ──────────────────────
+    # A instalação usa as funções já existentes no repo
+    # (packages.sh, dotfiles.sh, greeter.sh). O compositor (Niri/Hyprland) é
+    # escolhido por select_compositor() e os pacotes/dotfiles são selecionados
+    # condicionalmente conforme COMPOSITOR_CHOICE.
+    local compositor_label="Niri"
+    [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ] && compositor_label="Hyprland"
+    log_info "Iniciando instalação do ambiente ${compositor_label}..."
 
     # NOTA: a instalação é guardada com '|| log_warn' de propósito. Sem isso, com
     # 'set -e' ativo, a falha de UM pacote abortaria todo o script ANTES de habilitar
@@ -97,14 +107,18 @@ main() {
         install_fedora_packages || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
     fi
 
-    # Aplicar dotfiles Niri
+    # Aplicar dotfiles (compositor escolhido + apps comuns)
     # Guardas '|| log_warn': nenhuma falha de dotfile pode impedir as etapas
     # críticas seguintes (configuração do SDDM e habilitação do boot gráfico).
     if [ -d "$REPO_DIR/dotfiles" ]; then
         backup_existing_configs || log_warn "Backup de ~/.config falhou — continuando."
         deploy_dotfiles "$REPO_DIR" || log_warn "Falha ao implantar dotfiles — revise os avisos acima."
-        # Apontar o Niri para o shell escolhido (DMS ou Noctalia)
-        apply_shell_config || log_warn "Falha ao apontar o Niri para o shell escolhido."
+        # Apontar o Niri para o shell escolhido (DMS ou Noctalia).
+        # Específico do Niri (troca de includes .kdl); o Hyprland usa um único
+        # arquivo Lua já cabeado para o Noctalia, sem seleção de includes.
+        if [ "${COMPOSITOR_CHOICE:-niri}" = "niri" ]; then
+            apply_shell_config || log_warn "Falha ao apontar o Niri para o shell escolhido."
+        fi
     fi
 
     # Configurar greeter/DM — etapa mais crítica: garante boot gráfico.
@@ -112,16 +126,22 @@ main() {
         setup_greeter || log_warn "Configuração do SDDM terminou com avisos — veja a verificação final."
     fi
 
-    log_success "Ambiente Niri instalado."
+    log_success "Ambiente ${compositor_label} instalado."
 
     # Configurações finais do sistema (grupos, Flathub, firewall UFW)
     if declare -f configure_system_post &>/dev/null; then
         configure_system_post || log_warn "Configurações finais do sistema tiveram falhas."
     fi
 
-    # Executar verificações finais de integridade do ambiente
-    if declare -f verify_niri_environment &>/dev/null; then
-        verify_niri_environment "$REPO_DIR" || log_warn "Problemas detectados no ambiente Niri."
+    # Executar verificações finais de integridade do ambiente (por compositor)
+    if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
+        if declare -f verify_hyprland_environment &>/dev/null; then
+            verify_hyprland_environment "$REPO_DIR" || log_warn "Problemas detectados no ambiente Hyprland."
+        fi
+    else
+        if declare -f verify_niri_environment &>/dev/null; then
+            verify_niri_environment "$REPO_DIR" || log_warn "Problemas detectados no ambiente Niri."
+        fi
     fi
     if declare -f verify_display_manager &>/dev/null; then
         verify_display_manager "$REPO_DIR" || log_warn "Problemas detectados no Display Manager."

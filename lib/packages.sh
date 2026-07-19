@@ -196,7 +196,6 @@ install_fedora_packages() {
         log_info "Instalando pacotes essenciais via DNF..."
 
         local packages=(
-            niri
             fuzzel
             cava
             alacritty
@@ -249,6 +248,14 @@ install_fedora_packages() {
             shared-mime-info
             libappindicator-gtk3
         )
+
+        # Compositor escolhido (Niri ou Hyprland) — veja select_compositor().
+        # 'grim'/'slurp'/'jq' cobrem os atalhos de screenshot da config do Hyprland.
+        if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
+            packages+=(hyprland xdg-desktop-portal-hyprland grim slurp jq)
+        else
+            packages+=(niri)
+        fi
 
         # Adicionar pacotes do SDDM
         packages+=(
@@ -328,8 +335,15 @@ install_arch_packages() {
     sudo pacman -Syu --noconfirm
 
     if prompt_yes_no "Deseja instalar os pacotes essenciais do ambiente no Arch Linux?" "S"; then
-        # 1. Pacotes base do ambiente
-        install_package_list "$pkg_dir/arch-base.txt" "Ambiente base (Niri + Apps)"
+        # 1. Pacotes base comuns do ambiente (independentes do compositor)
+        install_package_list "$pkg_dir/arch-base.txt" "Ambiente base (apps comuns)"
+
+        # 1b. Compositor escolhido (Niri ou Hyprland) — veja select_compositor().
+        if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
+            install_package_list "$pkg_dir/arch-hyprland.txt" "Compositor Hyprland"
+        else
+            install_package_list "$pkg_dir/arch-niri.txt" "Compositor Niri"
+        fi
 
         # 2. Display Manager (SDDM) — instalado ANTES do shell de propósito.
         # O Noctalia (AUR) pode falhar/travar numa build longa; se isso vier
@@ -466,7 +480,22 @@ select_and_install_menu() {
 
         log_info "Instalando: $app"
         if pacman -Si "$app" &>/dev/null 2>&1; then
-            sudo pacman -S --needed --noconfirm "$app" && log_success "$app instalado" || log_warn "Falha ao instalar $app"
+            # Captura a saída (via tee) preservando o progresso na tela, para
+            # distinguir uma falha por CONFLITO de pacote de uma falha comum.
+            # Ex.: no CachyOS, 'timeshift' conflita com 'cachyos-snapper-support'
+            # (o sistema já usa snapper p/ snapshots) e o pacman aborta — antes
+            # isso poluía o log com "erro: conflito..." sem explicação.
+            local _pac_out
+            _pac_out=$(mktemp)
+            if sudo pacman -S --needed --noconfirm "$app" 2>&1 | tee "$_pac_out"; then
+                log_success "$app instalado"
+            elif grep -qiE 'estão em conflito|conflito de pacotes|are in conflict|package conflicts' "$_pac_out"; then
+                log_warn "$app NÃO instalado: conflita com um pacote já presente no sistema (pulando)."
+                log_info  "  Ex.: no CachyOS, 'timeshift' conflita com 'cachyos-snapper-support' (o sistema já usa snapper para snapshots)."
+            else
+                log_warn "Falha ao instalar $app"
+            fi
+            rm -f "$_pac_out"
         elif [ "${AUR_HELPER:-none}" != "none" ]; then
             "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$app" && log_success "$app instalado" || log_warn "Falha ao instalar AUR: $app"
         else

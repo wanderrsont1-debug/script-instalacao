@@ -1,0 +1,7 @@
+# Pacotes específicos do compositor Niri (Arch/CachyOS)
+# Instalado apenas quando o usuário escolhe o Niri em select_compositor().
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+niri
+# Portal específico do GNOME usado pelo Niri para screencast/screenshot
+xdg-desktop-portal-gnome

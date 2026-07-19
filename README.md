@@ -1,4 +1,4 @@
-# Script de Instalação — Niri
+# Script de Instalação — Niri / Hyprland
 
 ![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)
 ![Fedora](https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white)
@@ -10,14 +10,24 @@ Script de instalação automatizada para recriar um ambiente Wayland completo em
 
 ## 🖥️ Ambientes Suportados
 
-| Ambiente | Compositor | Desktop Shell | Distros |
-|---|---|---|---|
-| **Niri** | Niri (Wayland) | **DankMaterialShell (DMS)** *ou* **Noctalia Shell (beta 5.x)** — escolha no início | Arch, CachyOS, Fedora |
+No começo da instalação você escolhe **o compositor** e, no caso do Niri, **o shell**:
 
-No começo da instalação você escolhe o shell:
+| Compositor | Config | Desktop Shell | Distros |
+|---|---|---|---|
+| **Niri** | KDL (`~/.config/niri`) | **DankMaterialShell (DMS)** *ou* **Noctalia Shell (beta 5.x)** — escolha no início | Arch, CachyOS, Fedora |
+| **Hyprland** | Lua (`~/.config/hypr/hyprland.lua`) | **Noctalia Shell** (fixado — a config incluída é cabeada para o Noctalia) | Arch, CachyOS, Fedora |
+
+**1) Compositor** (`select_compositor`):
+
+- **Niri** — compositor *scrollable-tiling* (padrão do projeto).
+- **Hyprland** — compositor dinâmico, usando a config Lua (`hyprland.lua`) incluída, já cabeada para o Noctalia (autostart `noctalia --daemon` + atalhos via `noctalia msg`).
+
+**2) Shell** (`select_shell`, apenas para o Niri):
 
 - **DMS** (`dms-shell`) — estável, padrão do projeto.
 - **Noctalia** (beta 5.x) — instalado de `noctalia` (repo CachyOS) ou, como fallback, `noctalia-git` (AUR). Os keybinds/autostart do Niri são ajustados automaticamente para o shell escolhido.
+
+> Ao escolher **Hyprland**, o shell é fixado automaticamente em **Noctalia**, pois a config Lua fornecida usa o Noctalia (evita a combinação incoerente de DMS com keybinds do Noctalia).
 
 ---
 
@@ -29,7 +39,7 @@ cd script-instalacao
 bash install.sh
 ```
 
-Ao executar, o script instalará e configurará o ambiente Niri com DankMaterialShell e SDDM automaticamente.
+Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e então instalará e configurará o ambiente escolhido com SDDM automaticamente.
 
 > ⚠️ **Não execute como root.** O script pede `sudo` internamente quando necessário.
 
@@ -37,11 +47,13 @@ Ao executar, o script instalará e configurará o ambiente Niri com DankMaterial
 
 
 
-## 📦 O que é instalado (Niri + DMS — Arch)
+## 📦 O que é instalado (Arch)
 
 | Categoria | Pacotes |
 |---|---|
-| Compositor | `niri`, `xdg-desktop-portal`, `xdg-desktop-portal-gtk`, `xdg-desktop-portal-gnome` |
+| Base do Portal | `xdg-desktop-portal`, `xdg-desktop-portal-gtk` (comum aos dois compositores) |
+| Compositor: **Niri** | `niri`, `xdg-desktop-portal-gnome` |
+| Compositor: **Hyprland** | `hyprland`, `xdg-desktop-portal-hyprland`, `hyprland-qtutils`, `jq` (+ `grim`/`slurp` da base) |
 | Shell de Desktop | `dms-shell` **ou** `noctalia`/`noctalia-git` (escolha), `matugen` |
 | Terminais | `alacritty`, `ghostty` |
 | Launcher | `fuzzel` |
@@ -100,12 +112,14 @@ script-instalacao/
 │   ├── utils.sh                (cores, logging, prompt)
 │   ├── checks.sh               (detecção de distro, AUR helper)
 │   ├── packages.sh             (instalação pacman/dnf/AUR)
-│   ├── dotfiles.sh             (deploy de dotfiles Niri + seleção de shell)
-│   ├── greeter.sh              (configuração SDDM + garantia do SDDM)
+│   ├── dotfiles.sh             (deploy de dotfiles + seleção de shell; Niri/Hyprland)
+│   ├── greeter.sh              (configuração SDDM + garantia do SDDM + verificações)
 │   └── system.sh               (snapshot, mirrors, UFW, Flathub, grupos)
 │
 ├── packages/                   ← Listas de pacotes por distro/ambiente
-│   ├── arch-base.txt
+│   ├── arch-base.txt           ← Apps comuns (independentes do compositor)
+│   ├── arch-niri.txt           ← Compositor Niri
+│   ├── arch-hyprland.txt       ← Compositor Hyprland
 │   ├── arch-sddm.txt
 │   ├── arch-fonts.txt
 │   ├── arch-browsers.txt       ← Navegadores (menu de seleção múltipla)
@@ -113,8 +127,9 @@ script-instalacao/
 │   ├── arch-libs.txt           ← Bibliotecas/utilitários essenciais (opt-in)
 │   └── arch-optional.txt
 │
-├── dotfiles/                   ← Dotfiles do ambiente Niri
-│   └── niri/
+├── dotfiles/                   ← Dotfiles (o compositor não escolhido é ignorado)
+│   ├── niri/                   ← Config do Niri (KDL)
+│   └── hypr/                   ← Config do Hyprland (hyprland.lua)
 │
 
 └── system/                     ← Arquivos de sistema (SDDM theme)

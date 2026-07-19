@@ -33,7 +33,10 @@ spotify-launcher | Spotify (cliente oficial via launcher)
 steam            | Steam (requer repositório multilib habilitado)
 
 # === Ferramentas de Sistema ===
-timeshift        | Timeshift (snapshots/restauração do sistema)
+# ATENÇÃO: no CachyOS o timeshift CONFLITA com 'cachyos-snapper-support' (já
+# instalado) — o sistema já faz snapshots via snapper (usado por este próprio
+# instalador na etapa de snapshot). Nesses sistemas, deixe o timeshift desmarcado.
+timeshift        | Timeshift (snapshots — NÃO usar no CachyOS: conflita com snapper)
 filelight        | Filelight (visualizar uso do disco)
 
 # === CLIs de IA ===

@@ -163,10 +163,33 @@ configure_display_manager() {
         fi
 }
 
+# ─────────────────────────────────────────────────────────────
+# Checagem ROBUSTA de existência de uma unit do systemd.
+#
+# BUG corrigido: o método antigo — `systemctl list-unit-files | grep "^x.service"`
+# — dava FALSO-NEGATIVO logo após uma transação grande do pacman (o cache de
+# units do systemd ainda não tinha sido recarregado), fazendo o instalador
+# achar que NetworkManager/bluetooth/power-profiles-daemon/sddm "não existiam"
+# e NÃO habilitá-los. `systemctl cat` lê o arquivo da unit direto do disco e
+# não depende do estado do cache; `list-unit-files <padrão>` como argumento é
+# usado como confirmação adicional.
+# ─────────────────────────────────────────────────────────────
+unit_exists() {
+    local unit="$1"
+    systemctl cat "$unit" &>/dev/null && return 0
+    systemctl list-unit-files "$unit" --no-legend --no-pager 2>/dev/null | grep -q . && return 0
+    return 1
+}
+
 enable_systemd_services() {
     # NOTA: Habilitação de serviços é obrigatória — sem DM habilitado o sistema
     # inicia no TTY (multi-user.target), que é exatamente o bug que queremos evitar.
     log_info "Habilitando serviços essenciais no systemd..."
+
+    # Recarrega o cache de units ANTES de checar/habilitar. Sem isso, units
+    # recém-instaladas pela transação do pacman podem ficar "invisíveis" para
+    # o systemctl por um instante — causa raiz do falso "serviço não encontrado".
+    sudo systemctl daemon-reload &>/dev/null || true
 
     # Lista padrão de serviços que sempre devem ser ativados se existirem
     local services=(NetworkManager bluetooth power-profiles-daemon sddm)
@@ -189,7 +212,7 @@ enable_systemd_services() {
 
     # Habilitar os serviços instalados
     for service in "${services[@]}"; do
-        if systemctl list-unit-files 2>/dev/null | grep -q "^${service}.service"; then
+        if unit_exists "${service}.service"; then
             # Verificação do binário: remover prefixos especiais do systemd (-@+!)
             # '|| true' evita que um grep sem match (pipefail + set -e) aborte todo o
             # instalador justamente no passo que habilita o Display Manager.
@@ -215,7 +238,7 @@ enable_systemd_services() {
             # só existe depois que o pacote sddm estiver presente.
             if [ "$service" = "sddm" ]; then
                 log_info "  → Tentando instalar o SDDM para criar a unit..."
-                if ensure_sddm_installed && systemctl list-unit-files 2>/dev/null | grep -q "^sddm.service"; then
+                if ensure_sddm_installed && { sudo systemctl daemon-reload &>/dev/null || true; unit_exists "sddm.service"; }; then
                     sudo systemctl enable sddm.service \
                         && log_success "  → sddm.service habilitado." \
                         || log_error "  → Falha ao habilitar sddm.service."
@@ -223,7 +246,14 @@ enable_systemd_services() {
                     log_error "  → SDDM ainda ausente. Instale manualmente e rode: sudo systemctl enable sddm.service"
                 fi
             else
-                log_info "  Verifique se o pacote correspondente foi instalado."
+                # Último recurso: se a unit realmente existir (pacote instalado)
+                # mas o checador falhou, tentar habilitar assim mesmo — 'enable'
+                # é idempotente e só falha de verdade se a unit não existir.
+                if sudo systemctl enable "${service}.service" &>/dev/null; then
+                    log_success "  → ${service}.service habilitado (via fallback)."
+                else
+                    log_info "  Verifique se o pacote correspondente foi instalado."
+                fi
             fi
         fi
     done
@@ -613,6 +643,127 @@ verify_niri_environment() {
         return 0
     else
         echo -e "${GREEN}  ✓ Ambiente Niri+${shell_label} verificado e pronto!${NC}"
+        echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
+        return 0
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────
+# Verificação completa do ambiente Hyprland + Noctalia antes de reiniciar
+# Detecta problemas que impediriam o compositor ou o shell de funcionar
+# após o reboot. A config incluída (hyprland.lua) usa o formato Lua e é
+# cabeada para o Noctalia (autostart "noctalia --daemon").
+# ─────────────────────────────────────────────────────────────
+verify_hyprland_environment() {
+    local repo_dir="$1"
+    local user_home
+    user_home=$(get_user_home)
+    local hypr_cfg_dir="$user_home/.config/hypr"
+    local hypr_config="$hypr_cfg_dir/hyprland.lua"
+
+    echo ""
+    echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║     Verificação do Ambiente Hyprland + Noctalia  ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    local errors=0
+    local warnings=0
+
+    # ── 1. Binário do Hyprland ────────────────────────────────
+    log_info "1/6 — Verificando binário hyprland..."
+    if command -v Hyprland &>/dev/null || command -v hyprland &>/dev/null; then
+        log_success "hyprland encontrado: $(command -v Hyprland 2>/dev/null || command -v hyprland)"
+    else
+        log_error "Binário 'Hyprland' NÃO encontrado no PATH!"
+        log_info "  → Instale com: sudo pacman -S hyprland  (Arch) | sudo dnf install hyprland  (Fedora)"
+        errors=$((errors + 1))
+    fi
+
+    # ── 2. Binário do Noctalia ────────────────────────────────
+    log_info "2/6 — Verificando binário noctalia..."
+    if command -v noctalia &>/dev/null; then
+        log_success "noctalia encontrado: $(command -v noctalia)"
+    else
+        log_error "Binário 'noctalia' NÃO encontrado!"
+        log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
+        errors=$((errors + 1))
+    fi
+
+    # ── 3. Config Lua do Hyprland ─────────────────────────────
+    log_info "3/6 — Verificando configuração do Hyprland em $hypr_cfg_dir..."
+    if [ -f "$hypr_config" ] || [ -L "$hypr_config" ]; then
+        log_success "hyprland.lua encontrado."
+        local real_config
+        real_config=$(readlink -f "$hypr_config" 2>/dev/null || echo "$hypr_config")
+
+        # 3a. Sem caminhos /home hardcoded
+        if grep -q '/home/' "$real_config" 2>/dev/null; then
+            log_warn "hyprland.lua contém caminho(s) /home hardcoded — pode não funcionar para outro usuário."
+            warnings=$((warnings + 1))
+        else
+            log_success "Nenhum caminho /home hardcoded na config."
+        fi
+    else
+        log_error "hyprland.lua NÃO encontrado em $hypr_cfg_dir!"
+        log_info "  → Os dotfiles do Hyprland podem não ter sido implantados corretamente."
+        errors=$((errors + 1))
+    fi
+
+    # ── 4. Noctalia é iniciado com o Hyprland? ────────────────
+    log_info "4/6 — Verificando autostart do Noctalia na config do Hyprland..."
+    if [ -f "$hypr_config" ] && grep -q 'noctalia' "$hypr_config" 2>/dev/null; then
+        log_success "A config do Hyprland referencia o noctalia (autostart/IPC)."
+    else
+        log_warn "A config do Hyprland não referencia o noctalia — o shell pode não iniciar."
+        warnings=$((warnings + 1))
+    fi
+
+    # ── 5. Binários recomendados (atalhos da config) ──────────
+    log_info "5/6 — Verificando binários recomendados..."
+    # A config usa: ghostty, fuzzel, grim, slurp, jq, wl-clipboard(wl-copy), playerctl
+    local optional_bins=(ghostty fuzzel grim slurp jq wl-copy)
+    local missing_optional=()
+    for bin in "${optional_bins[@]}"; do
+        if command -v "$bin" &>/dev/null; then
+            log_success "  ✓ $bin"
+        else
+            missing_optional+=("$bin")
+            log_warn "  ⚠ $bin não encontrado (alguns atalhos podem não funcionar)"
+        fi
+    done
+    if [ ${#missing_optional[@]} -gt 0 ]; then
+        warnings=$((warnings + 1))
+    fi
+
+    # ── 6. Portal do XDG para o Hyprland ──────────────────────
+    log_info "6/6 — Verificando xdg-desktop-portal-hyprland..."
+    if [ "${DISTRO:-arch}" = "fedora" ]; then
+        rpm -q xdg-desktop-portal-hyprland &>/dev/null \
+            && log_success "xdg-desktop-portal-hyprland instalado." \
+            || { log_warn "xdg-desktop-portal-hyprland ausente (screencast/compartilhamento de tela pode falhar)."; warnings=$((warnings + 1)); }
+    else
+        pacman -Q xdg-desktop-portal-hyprland &>/dev/null \
+            && log_success "xdg-desktop-portal-hyprland instalado." \
+            || { log_warn "xdg-desktop-portal-hyprland ausente (screencast/compartilhamento de tela pode falhar)."; warnings=$((warnings + 1)); }
+    fi
+
+    # ── Resultado final ───────────────────────────────────────
+    echo ""
+    echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
+    if [ "$errors" -gt 0 ]; then
+        echo -e "${RED}  ✗ Verificação do Hyprland FALHOU: $errors erro(s), $warnings aviso(s)${NC}"
+        log_error "O ambiente Hyprland+Noctalia pode NÃO funcionar após a reinicialização."
+        log_info  "Corrija os erros acima antes de reiniciar o sistema."
+        echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
+        return 1
+    elif [ "$warnings" -gt 0 ]; then
+        echo -e "${YELLOW}  ⚠ Verificação do Hyprland OK com $warnings aviso(s)${NC}"
+        log_info "O Hyprland+Noctalia deve funcionar, mas revise os avisos acima."
+        echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
+        return 0
+    else
+        echo -e "${GREEN}  ✓ Ambiente Hyprland+Noctalia verificado e pronto!${NC}"
         echo -e "${BLUE}───────────────────────────────────────────────────${NC}"
         return 0
     fi
