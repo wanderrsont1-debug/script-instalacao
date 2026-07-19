@@ -1,0 +1,40 @@
+# Bibliotecas e utilitários essenciais (Fedora)
+# Equivalente ao packages/arch-libs.txt, com os nomes do Fedora.
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === Manuais / Shell ===
+man-db
+man-pages
+bash-completion
+
+# === Compactadores ===
+# No Fedora o pacote chama-se '7zip' (no Arch, '7zip'; o antigo p7zip não existe mais).
+7zip
+unzip
+zip
+# 'unar' substitui o 'unarchiver' do Arch. O 'unrar' fica de fora: está no
+# RPM Fusion nonfree e o unar já abre .rar.
+unar
+
+# === Montagem / Sistemas de arquivos ===
+gvfs
+gvfs-mtp
+gvfs-smb
+gvfs-nfs
+gvfs-afc
+ntfs-3g
+exfatprogs
+dosfstools
+
+# === Diagnóstico de hardware ===
+usbutils
+pciutils
+lsof
+
+# === Gráficos ===
+# Equivalente ao 'vulkan-icd-loader' do Arch.
+vulkan-loader
+
+# NOTA: o 'reflector' do arch-libs.txt não tem equivalente no Fedora — ele
+# otimiza mirrors do pacman. No Fedora esse papel é do dnf.conf, ajustado por
+# optimize_dnf_conf() em lib/checks.sh.

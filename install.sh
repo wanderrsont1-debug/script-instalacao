@@ -104,7 +104,7 @@ main() {
     if [ "${DISTRO}" = "arch" ]; then
         install_arch_packages "$REPO_DIR" || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
     elif [ "${DISTRO}" = "fedora" ]; then
-        install_fedora_packages || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
+        install_fedora_packages "$REPO_DIR" || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
     fi
 
     # Aplicar dotfiles (compositor escolhido + apps comuns)

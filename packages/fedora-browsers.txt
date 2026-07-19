@@ -1,0 +1,12 @@
+# Navegadores (Fedora) — menu de seleção múltipla.
+# Equivalente ao packages/arch-browsers.txt.
+#
+# No Arch as alternativas ao Firefox vêm do AUR/repo CachyOS; no Fedora a
+# origem prática é o Flathub, salvo o Firefox, que é nativo.
+# O Helium Browser não está no Flathub nem no Fedora — por isso não aparece aqui.
+
+firefox                                | Firefox — nativo do Fedora, padrão
+flatpak:app.zen_browser.zen            | Zen Browser — baseado no Firefox, foco em produtividade [Flatpak]
+flatpak:com.brave.Browser              | Brave — Chromium com bloqueio de anúncios integrado [Flatpak]
+flatpak:io.gitlab.librewolf-community  | LibreWolf — Firefox focado em privacidade [Flatpak]
+flatpak:net.mullvad.MullvadBrowser     | Mullvad Browser — anti-fingerprinting (base Tor) [Flatpak]

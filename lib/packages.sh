@@ -8,6 +8,155 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
 
+# ═════════════════════════════════════════════════════════════
+# BACKEND DE PACOTES AGNÓSTICO DE DISTRO
+#
+# Antes, todo o motor de instalação (menus inclusive) estava cabeado em
+# 'pacman -Si' e no AUR_HELPER, o que tornava as etapas interativas —
+# navegadores, apps opcionais, libs — exclusivas do Arch. Estas funções
+# isolam a diferença entre as distros num único lugar, para que o MESMO
+# código de menu sirva aos dois casos.
+#
+# Formato aceito nas listas .txt (packages/*.txt):
+#   nome                        → pacote nativo (pacman / dnf)
+#   flatpak:<app-id>            → Flatpak vindo do Flathub
+#   copr:<dono>/<projeto>:<pkg> → habilita o COPR e instala (só Fedora)
+#   curl:<url>                  → instalador oficial do próprio programa
+# ═════════════════════════════════════════════════════════════
+
+# O pacote existe no gerenciador nativo desta distro?
+pkg_available() {
+    case "${DISTRO:-arch}" in
+        fedora) dnf list "$1" &>/dev/null ;;
+        *)      pacman -Si "$1" &>/dev/null ;;
+    esac
+}
+
+# Instalar um ou mais pacotes pelo gerenciador nativo.
+pkg_install() {
+    case "${DISTRO:-arch}" in
+        fedora) sudo dnf install -y "$@" ;;
+        *)      sudo pacman -S --needed --noconfirm "$@" ;;
+    esac
+}
+
+# O pacote está instalado?
+pkg_installed() {
+    case "${DISTRO:-arch}" in
+        fedora) rpm -q "$1" &>/dev/null ;;
+        *)      pacman -Q "$1" &>/dev/null ;;
+    esac
+}
+
+# Instalar um app do Flathub. Usado para programas que não têm pacote nativo
+# no Fedora (Obsidian, Spotify, alguns navegadores...).
+flatpak_install() {
+    local app_id="$1"
+    if ! command -v flatpak &>/dev/null; then
+        log_warn "  flatpak não está instalado — não é possível instalar $app_id."
+        return 1
+    fi
+    # O Flathub é adicionado por setup_flatpak(), mas esta etapa pode rodar
+    # antes dele; garantir aqui torna a função independente da ordem.
+    sudo flatpak remote-add --if-not-exists flathub \
+        https://dl.flathub.org/repo/flathub.flatpakrepo &>/dev/null || true
+    sudo flatpak install -y --noninteractive flathub "$app_id"
+}
+
+# Habilitar um repositório COPR (Fedora) e instalar o pacote indicado.
+copr_install() {
+    local spec="$1"              # <dono>/<projeto>:<pacote>
+    local repo="${spec%%:*}"
+    local pkg="${spec##*:}"
+
+    if [ "${DISTRO:-arch}" != "fedora" ]; then
+        log_warn "  Entrada COPR ignorada fora do Fedora: $spec"
+        return 1
+    fi
+    log_info "  Habilitando COPR ${repo}..."
+    sudo dnf copr enable -y "$repo" || { log_warn "  Falha ao habilitar o COPR ${repo}."; return 1; }
+    sudo dnf install -y "$pkg"
+}
+
+# Instalar UMA entrada de lista, seja qual for o seu prefixo.
+# Retorna 0 em sucesso, 1 em falha (o chamador decide o que logar).
+install_entry() {
+    local app="$1"
+
+    case "$app" in
+        curl:*)
+            local url="${app#curl:}"
+            log_info "  Instalador oficial: $url"
+            # Baixar para um arquivo ANTES de executar, em vez de
+            # 'curl ... | bash'. No pipe, o status final é o do bash: se o
+            # download falhasse (404, DNS, rede), o bash recebia entrada vazia
+            # e saía com 0 — a falha era reportada como sucesso. Baixar antes
+            # permite checar o download e o conteúdo separadamente.
+            local tmp_script rc
+            tmp_script=$(mktemp)
+            if ! curl -fsSL "$url" -o "$tmp_script"; then
+                log_warn "  Falha ao baixar o instalador: $url"
+                rm -f "$tmp_script"
+                return 1
+            fi
+            if [ ! -s "$tmp_script" ]; then
+                log_warn "  Instalador baixado veio vazio: $url"
+                rm -f "$tmp_script"
+                return 1
+            fi
+            bash "$tmp_script"
+            rc=$?
+            rm -f "$tmp_script"
+            if [ "$rc" -eq 0 ]; then
+                log_info "  Se o comando não for encontrado, abra um novo terminal (instala em ~/.local/bin ou similar)."
+            fi
+            return "$rc"
+            ;;
+        flatpak:*)
+            local app_id="${app#flatpak:}"
+            log_info "  Flatpak: $app_id"
+            flatpak_install "$app_id"
+            return $?
+            ;;
+        copr:*)
+            copr_install "${app#copr:}"
+            return $?
+            ;;
+    esac
+
+    # ── Pacote nativo ────────────────────────────────────────
+    if pkg_available "$app"; then
+        if [ "${DISTRO:-arch}" = "fedora" ]; then
+            sudo dnf install -y "$app"
+            return $?
+        fi
+        # No Arch, distinguir falha por CONFLITO de uma falha comum: ex.: no
+        # CachyOS o 'timeshift' conflita com o 'cachyos-snapper-support' e o
+        # pacman aborta — antes isso poluía o log sem explicação.
+        local _pac_out _rc
+        _pac_out=$(mktemp)
+        sudo pacman -S --needed --noconfirm "$app" 2>&1 | tee "$_pac_out"
+        _rc=${PIPESTATUS[0]}
+        if [ "$_rc" -ne 0 ] && grep -qiE 'estão em conflito|conflito de pacotes|are in conflict|package conflicts' "$_pac_out"; then
+            log_warn "  $app NÃO instalado: conflita com um pacote já presente (pulando)."
+            log_info  "    Ex.: no CachyOS o 'timeshift' conflita com o 'cachyos-snapper-support'."
+            rm -f "$_pac_out"
+            return 0   # conflito conhecido não conta como erro
+        fi
+        rm -f "$_pac_out"
+        return "$_rc"
+    fi
+
+    # Não existe nativamente: no Arch pode ser AUR.
+    if [ "${DISTRO:-arch}" != "fedora" ] && [ "${AUR_HELPER:-none}" != "none" ]; then
+        "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$app"
+        return $?
+    fi
+
+    log_warn "  '$app' não está disponível nesta distro (e não há alternativa configurada)."
+    return 1
+}
+
 # ─────────────────────────────────────────────────────────────
 # UTILITÁRIO: Instalar lista de pacotes a partir de arquivo .txt
 # Separa automaticamente pacotes oficiais (pacman) de AUR
@@ -35,6 +184,42 @@ install_package_list() {
 
     log_info "Instalando $description (${#packages[@]} pacotes)..."
 
+    # ── Fedora ───────────────────────────────────────────────
+    # Não existe a divisão oficial/AUR; entradas com prefixo (flatpak:, copr:,
+    # curl:) vão uma a uma por install_entry(), e o resto é uma transação dnf
+    # só — bem mais rápido que instalar pacote a pacote.
+    if [ "${DISTRO:-arch}" = "fedora" ]; then
+        local native=() special=()
+        for pkg in "${packages[@]}"; do
+            case "$pkg" in
+                flatpak:*|copr:*|curl:*) special+=("$pkg") ;;
+                *)                       native+=("$pkg") ;;
+            esac
+        done
+
+        if [ ${#native[@]} -gt 0 ]; then
+            sudo dnf install -y --skip-broken "${native[@]}" \
+                || log_warn "Alguns pacotes de '$description' falharam."
+            # Relatar o que o --skip-broken descartou silenciosamente.
+            local missing=()
+            for pkg in "${native[@]}"; do
+                pkg_installed "$pkg" || missing+=("$pkg")
+            done
+            if [ ${#missing[@]} -gt 0 ]; then
+                log_warn "Não instalados em '$description': ${missing[*]}"
+            fi
+        fi
+
+        for pkg in "${special[@]}"; do
+            log_info "  $pkg"
+            install_entry "$pkg" || log_warn "  Falha: $pkg"
+        done
+
+        log_success "$description processados."
+        return 0
+    fi
+
+    # ── Arch / CachyOS ───────────────────────────────────────
     # Separar pacotes oficiais dos pacotes AUR
     local official=()
     local aur=()
@@ -283,6 +468,9 @@ setup_fedora_codecs() {
 # FEDORA — Instalação principal
 # ─────────────────────────────────────────────────────────────
 install_fedora_packages() {
+    local repo_dir="$1"
+    local pkg_dir="$repo_dir/packages"
+
     setup_fedora_repos
 
     if prompt_yes_no "Deseja instalar os pacotes essenciais do ambiente no Fedora?" "S"; then
@@ -320,7 +508,8 @@ install_fedora_packages() {
             ufw
             gnome-text-editor
             nautilus
-            firefox
+            # firefox foi movido para o menu de navegadores
+            # (packages/fedora-browsers.txt), igual ao lado Arch.
             # Audio base (vital em instalações limpas/mínimas)
             pipewire
             wireplumber
@@ -401,14 +590,30 @@ install_fedora_packages() {
         install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
     fi
 
-    # Codecs multimídia (RPM Fusion) — paridade com o passo de codecs do Arch.
-    # Roda DEPOIS dos pacotes essenciais de propósito: o 'dnf swap' precisa que
-    # o ffmpeg-free já esteja instalado para poder substituí-lo.
-    setup_fedora_codecs
-
     if prompt_yes_no "Deseja instalar a fonte Meslo Nerd Font para evitar ícones quebrados?" "S"; then
         install_meslo_font
     fi
+
+    # ── Etapas interativas, em paridade com o fluxo do Arch ──
+    # A ordem espelha install_arch_packages(): navegadores, codecs, libs e,
+    # por último, os apps opcionais.
+
+    # Navegadores — menu de seleção múltipla.
+    install_browsers_fedora "$pkg_dir/fedora-browsers.txt"
+
+    # Codecs multimídia (RPM Fusion). Roda DEPOIS dos pacotes essenciais de
+    # propósito: o 'dnf swap' precisa que o ffmpeg-free já esteja instalado
+    # para poder substituí-lo. Também habilita o RPM Fusion nonfree, do qual
+    # dependem o steam e o vlc do menu de apps opcionais — por isso vem antes.
+    setup_fedora_codecs
+
+    # Bibliotecas e utilitários essenciais.
+    if prompt_yes_no "Deseja instalar bibliotecas e utilitários essenciais (arquivos, montagem, man, etc.)?" "S"; then
+        install_package_list "$pkg_dir/fedora-libs.txt" "Bibliotecas e utilitários essenciais"
+    fi
+
+    # Apps opcionais — menu de seleção múltipla.
+    install_optional_apps_fedora "$pkg_dir/fedora-optional.txt"
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -591,47 +796,26 @@ select_and_install_menu() {
         return 0
     fi
 
+    # A instalação de cada item é delegada a install_entry(), que resolve o
+    # prefixo (nativo / flatpak: / copr: / curl:) conforme a distro. É o que
+    # permite este mesmo menu servir Arch e Fedora sem duplicar código.
     log_info "Instalando itens selecionados..."
+    local failed=()
     for app in "${selected[@]}"; do
-        # Entradas "curl:<url>" usam o instalador oficial do próprio programa
-        # (curl | bash) em vez de pacman/AUR — para ferramentas que não estão
-        # nos repositórios oficiais e cujo AUR o usuário prefere evitar.
-        if [[ "$app" == curl:* ]]; then
-            local url="${app#curl:}"
-            log_info "Executando instalador oficial: curl -fsSL $url | bash"
-            if curl -fsSL "$url" | bash; then
-                log_success "Instalador oficial concluído."
-                log_info "  Se o comando não for encontrado, abra um novo terminal (instala em ~/.local/bin ou similar)."
-            else
-                log_warn "Falha no instalador oficial: $url"
-            fi
-            continue
-        fi
-
         log_info "Instalando: $app"
-        if pacman -Si "$app" &>/dev/null 2>&1; then
-            # Captura a saída (via tee) preservando o progresso na tela, para
-            # distinguir uma falha por CONFLITO de pacote de uma falha comum.
-            # Ex.: no CachyOS, 'timeshift' conflita com 'cachyos-snapper-support'
-            # (o sistema já usa snapper p/ snapshots) e o pacman aborta — antes
-            # isso poluía o log com "erro: conflito..." sem explicação.
-            local _pac_out
-            _pac_out=$(mktemp)
-            if sudo pacman -S --needed --noconfirm "$app" 2>&1 | tee "$_pac_out"; then
-                log_success "$app instalado"
-            elif grep -qiE 'estão em conflito|conflito de pacotes|are in conflict|package conflicts' "$_pac_out"; then
-                log_warn "$app NÃO instalado: conflita com um pacote já presente no sistema (pulando)."
-                log_info  "  Ex.: no CachyOS, 'timeshift' conflita com 'cachyos-snapper-support' (o sistema já usa snapper para snapshots)."
-            else
-                log_warn "Falha ao instalar $app"
-            fi
-            rm -f "$_pac_out"
-        elif [ "${AUR_HELPER:-none}" != "none" ]; then
-            "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$app" && log_success "$app instalado" || log_warn "Falha ao instalar AUR: $app"
+        if install_entry "$app"; then
+            log_success "$app instalado"
         else
-            log_warn "$app é um pacote AUR e nenhum AUR helper está disponível. Pulando."
+            log_warn "Falha ao instalar: $app"
+            failed+=("$app")
         fi
     done
+
+    if [ ${#failed[@]} -gt 0 ]; then
+        log_warn "Itens que falharam (${#failed[@]}): ${failed[*]}"
+        log_info "  A instalação continua — estes itens podem ser instalados manualmente depois."
+    fi
+    return 0
 }
 
 # Wrapper — menu de apps opcionais (compatibilidade com o restante do script)
@@ -641,6 +825,16 @@ install_optional_apps_arch() {
 
 # Wrapper — menu de navegadores (seleção múltipla)
 install_browsers_arch() {
+    select_and_install_menu "$1" "Navegadores (escolha um ou mais)"
+}
+
+# Wrappers do Fedora — mesmos menus, mesma função; só muda o arquivo de lista.
+# É esta a razão de todo o backend ter sido tornado agnóstico de distro.
+install_optional_apps_fedora() {
+    select_and_install_menu "$1" "Aplicativos Opcionais"
+}
+
+install_browsers_fedora() {
     select_and_install_menu "$1" "Navegadores (escolha um ou mais)"
 }
 

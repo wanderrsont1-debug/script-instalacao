@@ -1,0 +1,42 @@
+# Aplicativos opcionais (Fedora) — menu de seleção múltipla.
+# Equivalente ao packages/arch-optional.txt, com os nomes/origens do Fedora.
+#
+# Formato: <entrada> | <rótulo exibido no menu>
+#   nome                        → pacote nativo do dnf
+#   flatpak:<app-id>            → Flatpak do Flathub (sem pacote nativo no Fedora)
+#   copr:<dono>/<projeto>:<pkg> → habilita o COPR e instala
+#   curl:<url>                  → instalador oficial do próprio programa
+#
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === Produtividade / Estudo ===
+flatpak:net.ankiweb.Anki | Anki (flashcards / repetição espaçada) [Flatpak]
+calibre                  | Calibre (gerenciador e leitor de e-books)
+flatpak:md.obsidian.Obsidian | Obsidian (anotações e conhecimento pessoal) [Flatpak]
+libreoffice              | LibreOffice (suíte de escritório completa)
+
+# === Gráficos / Mídia ===
+gimp                     | GIMP (editor de imagens)
+inkscape                 | Inkscape (gráficos vetoriais)
+kdenlive                 | Kdenlive (editor de vídeo)
+obs-studio               | OBS Studio (gravação de tela e streaming)
+vlc                      | VLC (reprodutor multimídia) — requer RPM Fusion
+audacity                 | Audacity (editor de áudio)
+
+# === Rede / Arquivos ===
+qbittorrent              | qBittorrent (cliente torrent)
+flatpak:org.localsend.localsend_app | LocalSend (enviar arquivos na rede local) [Flatpak]
+flatpak:com.spotify.Client | Spotify (cliente oficial) [Flatpak]
+
+# === Sistema ===
+steam                    | Steam (requer RPM Fusion nonfree)
+timeshift                | Timeshift (snapshots do sistema)
+filelight                | Filelight (visualizar uso do disco)
+
+# === Desenvolvimento / IA ===
+# Instaladores oficiais: funcionam igual em qualquer distro.
+curl:https://claude.ai/install.sh | Claude Code (agente de IA no terminal — instalador oficial)
+curl:https://antigravity.google/cli/install.sh | Google Antigravity CLI (instalador oficial do Google)
+flatpak:dev.zed.Zed      | Zed (editor de código rápido) [Flatpak]
+helix                    | Helix (editor modal para terminal)
+code                     | VS Code — requer o repositório da Microsoft (veja o README)
