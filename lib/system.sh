@@ -121,7 +121,11 @@ configure_firewall() {
         sudo systemctl enable ufw.service &>/dev/null || true
     fi
 
-    if sudo ufw status 2>/dev/null | grep -qi 'Status: active'; then
+    # LC_ALL=C é obrigatório: a saída do ufw é traduzida por gettext. Num sistema
+    # em pt_BR o status sai como "Status: ativo", o grep por 'Status: active'
+    # nunca casava e o script avisava que o UFW podia estar inativo — mesmo com
+    # o firewall ativo e habilitado no boot (falso positivo visto no log).
+    if sudo LC_ALL=C ufw status 2>/dev/null | grep -qi 'Status: active'; then
         log_success "UFW ativo e habilitado no boot."
     else
         log_warn "UFW pode não estar ativo — verifique com: sudo ufw status"

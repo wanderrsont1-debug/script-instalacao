@@ -118,11 +118,26 @@ install_shell_packages() {
     local choice="${SHELL_CHOICE:-dms}"
 
     if [ "${DISTRO:-arch}" = "fedora" ]; then
-        # No Fedora, o DMS vem do COPR (já habilitado). Noctalia não tem pacote
-        # oficial no Fedora — avisamos e caímos para o DMS.
         if [ "$choice" = "noctalia" ]; then
-            log_warn "Noctalia não tem pacote oficial no Fedora — instalando o DMS no lugar."
+            # O Noctalia 5.x ESTÁ nos repositórios oficiais do Fedora (updates),
+            # como 'noctalia' — não precisa de COPR, AUR nem build manual.
+            # O pacote instala /usr/bin/noctalia, exatamente o binário que os
+            # dotfiles esperam ('noctalia --daemon' e 'noctalia msg <cmd>').
+            log_info "Instalando Noctalia Shell (beta 5.x) no Fedora..."
+            if sudo dnf install -y noctalia; then
+                # O Noctalia usa o matugen para gerar o tema dinâmico a partir do
+                # papel de parede. No caminho do DMS ele vem como dependência;
+                # no do Noctalia, não — por isso é instalado explicitamente aqui.
+                sudo dnf install -y matugen || log_warn "Falha ao instalar o matugen (tema dinâmico pode não funcionar)."
+                log_success "Noctalia (beta 5.x) instalado via dnf."
+                return 0
+            fi
+            log_error "Não foi possível instalar o Noctalia no Fedora."
+            log_info  "  Verifique manualmente com: dnf info noctalia"
+            return 1
         fi
+
+        # DMS (padrão) — vem do COPR avengemedia/dms, já habilitado por setup_fedora_repos().
         log_info "Instalando DankMaterialShell (dms) no Fedora..."
         sudo dnf install -y dms || log_warn "Falha ao instalar o dms."
         return 0
@@ -208,7 +223,12 @@ install_fedora_packages() {
             rsync
             playerctl
             git
-            util-linux-user
+            # NOTA: 'util-linux-user' NÃO existe mais no Fedora 44 — o 'chsh'
+            # voltou para o pacote 'util-linux' (que já é base do sistema).
+            # Manter o nome antigo fazia o --skip-broken descartá-lo em silêncio.
+            util-linux
+            # Geração de tema dinâmico a partir do papel de parede (DMS e Noctalia).
+            matugen
             google-noto-sans-fonts
             google-noto-color-emoji-fonts
             abattis-cantarell-fonts
@@ -233,7 +253,11 @@ install_fedora_packages() {
             libsecret
             xdg-desktop-portal
             xdg-desktop-portal-gtk
-            polkit-gnome
+            # NOTA: 'polkit-gnome' NÃO existe no Fedora (é o nome usado no Arch).
+            # Sem um agente polkit, nenhuma janela de autenticação aparece no
+            # Niri — montar discos, mudar perfil de energia, etc. falham em
+            # silêncio. 'mate-polkit' é o agente GTK equivalente no Fedora.
+            mate-polkit
             gstreamer1-plugin-libav
             gstreamer1-plugins-good
             gstreamer1-plugins-bad-free
@@ -254,7 +278,10 @@ install_fedora_packages() {
         if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
             packages+=(hyprland xdg-desktop-portal-hyprland grim slurp jq)
         else
-            packages+=(niri)
+            # Paridade com packages/arch-niri.txt: o Niri usa o portal do GNOME
+            # para screencast/screenshot. Vinha apenas por dependência transitiva
+            # — declarar explicitamente evita depender disso.
+            packages+=(niri xdg-desktop-portal-gnome grim slurp jq)
         fi
 
         # Adicionar pacotes do SDDM
@@ -271,6 +298,26 @@ install_fedora_packages() {
         )
 
         sudo dnf install -y --skip-broken --setopt=strict=False "${packages[@]}"
+
+        # O '--skip-broken' descarta pacotes inexistentes SEM erro e SEM aviso.
+        # Foi assim que 'util-linux-user' e 'polkit-gnome' (nomes do Arch, que
+        # não existem no Fedora) sumiram da instalação sem ninguém perceber —
+        # o log terminava com "sucesso" e o sistema ficava sem agente polkit.
+        # Este relatório torna qualquer descarte futuro visível no log.
+        local not_installed=()
+        for pkg in "${packages[@]}"; do
+            [[ "$pkg" =~ ^# ]] && continue
+            rpm -q "$pkg" &>/dev/null || not_installed+=("$pkg")
+        done
+        if [ ${#not_installed[@]} -gt 0 ]; then
+            log_warn "Pacotes solicitados que NÃO ficaram instalados (${#not_installed[@]}):"
+            for pkg in "${not_installed[@]}"; do
+                log_warn "  • $pkg"
+            done
+            log_info "  Verifique o nome no Fedora com: dnf search <nome>"
+        else
+            log_success "Todos os ${#packages[@]} pacotes solicitados estão instalados."
+        fi
 
         # Desktop Shell escolhido (DMS ou Noctalia)
         install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."

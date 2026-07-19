@@ -108,7 +108,13 @@ select_shell() {
     echo -e "${YELLOW}          Escolha do Desktop Shell${NC}"
     echo -e "${BLUE}===============================================${NC}"
     echo -e "  ${GREEN}1${NC}) DankMaterialShell (DMS)  — estável, padrão do projeto"
-    echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — via repo cachyos ou AUR (noctalia-git)"
+    # A origem do Noctalia muda por distro: no Fedora ele está nos repositórios
+    # oficiais (updates); no Arch/CachyOS vem do repo cachyos ou do AUR.
+    if [ "${DISTRO:-arch}" = "fedora" ]; then
+        echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — repositórios oficiais do Fedora"
+    else
+        echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — via repo cachyos ou AUR (noctalia-git)"
+    fi
     echo ""
     local reply
     read -p "Sua escolha [1]: " reply
