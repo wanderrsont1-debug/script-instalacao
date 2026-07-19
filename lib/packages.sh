@@ -202,6 +202,84 @@ setup_fedora_repos() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# FEDORA — RPM Fusion + codecs multimídia
+#
+# Equivalente ao packages/arch-codecs.txt do lado Arch. No Fedora os codecs
+# proprietários (H.264/H.265, AAC, etc.) NÃO estão nos repositórios oficiais
+# por questões de patente: o Fedora envia apenas 'ffmpeg-free' e os plugins
+# gstreamer livres. Sem o RPM Fusion, boa parte dos vídeos da web e dos
+# arquivos .mp4/.mkv locais simplesmente não toca.
+# ─────────────────────────────────────────────────────────────
+setup_fedora_codecs() {
+    if ! prompt_yes_no "Deseja instalar os codecs multimídia completos (RPM Fusion — necessário para H.264/H.265, MP4, etc.)?" "S"; then
+        log_info "Codecs multimídia ignorados."
+        return 0
+    fi
+
+    local fedora_ver
+    fedora_ver=$(rpm -E %fedora)
+
+    log_info "Habilitando os repositórios RPM Fusion (free e nonfree)..."
+    if ! sudo dnf install -y \
+        "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${fedora_ver}.noarch.rpm" \
+        "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${fedora_ver}.noarch.rpm"
+    then
+        log_warn "Falha ao habilitar o RPM Fusion — codecs proprietários não serão instalados."
+        return 0
+    fi
+    log_success "RPM Fusion habilitado."
+
+    # Trocar o ffmpeg-free (livre, limitado) pelo ffmpeg completo do RPM Fusion.
+    # '--allowerasing' é necessário: os dois pacotes se substituem mutuamente.
+    log_info "Substituindo ffmpeg-free pelo ffmpeg completo..."
+    sudo dnf swap -y ffmpeg-free ffmpeg --allowerasing \
+        || log_warn "Falha na troca do ffmpeg — o ffmpeg-free continua instalado."
+
+    # Completar o grupo multimídia com as versões irrestritas dos plugins.
+    # O PackageKit-gstreamer-plugin é excluído de propósito: ele dispara
+    # instalação automática de codecs em background, o que conflita com a
+    # instalação explícita feita aqui.
+    log_info "Atualizando o grupo multimídia com os codecs irrestritos..."
+    sudo dnf update -y @multimedia --setopt="install_weak_deps=False" \
+        --exclude=PackageKit-gstreamer-plugin \
+        || log_warn "Falha ao atualizar o grupo multimídia."
+
+    log_info "Instalando plugins gstreamer adicionais..."
+    sudo dnf install -y gstreamer1-plugins-bad-freeworld libavcodec-freeworld \
+        || log_warn "Alguns plugins gstreamer extras não foram instalados."
+
+    # ── Aceleração de vídeo por hardware (VA-API) ────────────
+    # O driver correto depende da GPU; instalar o errado é inofensivo (fica
+    # sem uso), mas detectar evita puxar pacote à toa.
+    log_info "Detectando GPU para a aceleração de vídeo por hardware..."
+    local gpu_info va_pkgs=()
+    gpu_info=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' || true)
+
+    if grep -qi 'intel' <<< "$gpu_info"; then
+        log_info "  GPU Intel detectada."
+        va_pkgs+=(intel-media-driver)
+    fi
+    if grep -qiE 'amd|ati|radeon' <<< "$gpu_info"; then
+        log_info "  GPU AMD detectada."
+        va_pkgs+=(mesa-va-drivers-freeworld mesa-vdpau-drivers-freeworld)
+    fi
+    if grep -qi 'nvidia' <<< "$gpu_info"; then
+        log_info "  GPU NVIDIA detectada — driver proprietário não é instalado por este script."
+        log_info "  Se quiser, instale depois com: sudo dnf install akmod-nvidia"
+    fi
+
+    if [ ${#va_pkgs[@]} -gt 0 ]; then
+        log_info "Instalando drivers VA-API: ${va_pkgs[*]}"
+        sudo dnf install -y --skip-broken "${va_pkgs[@]}" \
+            || log_warn "Falha ao instalar drivers VA-API — a decodificação por hardware pode não funcionar."
+    fi
+    sudo dnf install -y libva-utils || true
+
+    log_success "Codecs multimídia configurados. (Verifique a aceleração com: vainfo)"
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
 # FEDORA — Instalação principal
 # ─────────────────────────────────────────────────────────────
 install_fedora_packages() {
@@ -322,6 +400,11 @@ install_fedora_packages() {
         # Desktop Shell escolhido (DMS ou Noctalia)
         install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
     fi
+
+    # Codecs multimídia (RPM Fusion) — paridade com o passo de codecs do Arch.
+    # Roda DEPOIS dos pacotes essenciais de propósito: o 'dnf swap' precisa que
+    # o ffmpeg-free já esteja instalado para poder substituí-lo.
+    setup_fedora_codecs
 
     if prompt_yes_no "Deseja instalar a fonte Meslo Nerd Font para evitar ícones quebrados?" "S"; then
         install_meslo_font

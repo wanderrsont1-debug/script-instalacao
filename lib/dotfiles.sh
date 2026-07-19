@@ -11,11 +11,39 @@ source "$SCRIPT_DIR/utils.sh"
 # ─────────────────────────────────────────────────────────────
 backup_item() {
     local target="$1"
+    local max_backups=3
+
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-        local backup="${target}.bak"
+        # Backup COM TIMESTAMP (antes era um '.bak' de nome fixo).
+        # Com o nome fixo, reinstalar destruía o backup original: na 1ª execução
+        # o .bashrc do usuário virava .bashrc.bak; na 2ª, o .bashrc JÁ SUBSTITUÍDO
+        # pelo script sobrescrevia esse mesmo .bak e o original sumia para sempre.
+        # Como reinstalar é o fluxo de atualização recomendado deste projeto,
+        # isso acontecia na prática.
+        local backup="${target}.bak-$(date +%Y%m%d_%H%M%S)"
         log_warn "Fazendo backup de $target para $backup"
-        rm -rf "$backup"
         mv "$target" "$backup"
+
+        # Rotação: não acumular um backup novo a cada reinstalação.
+        #
+        # O MAIS ANTIGO é preservado para sempre e nunca entra na rotação: ele
+        # é o arquivo pristino, de antes de o instalador rodar pela primeira
+        # vez — justamente o mais valioso para recuperar. Rotacionar por data
+        # pura o eliminaria primeiro, que é o oposto do que se quer.
+        # Dos demais, mantemos apenas os mais recentes.
+        local all_backups
+        mapfile -t all_backups < <(
+            find "$(dirname "$target")" -maxdepth 1 -name "$(basename "$target").bak-*" 2>/dev/null | sort
+        )
+        if [ "${#all_backups[@]}" -gt "$max_backups" ]; then
+            # Descarta o índice 0 (o pristino) e os (max_backups-1) mais novos;
+            # o que sobra no meio é removido.
+            local candidates=("${all_backups[@]:1}")
+            local to_remove=("${candidates[@]:0:${#candidates[@]}-(max_backups-1)}")
+            for old in "${to_remove[@]}"; do
+                [ -n "$old" ] && rm -rf "$old"
+            done
+        fi
     elif [ -L "$target" ]; then
         # Remover link simbólico de instalação anterior sem aviso extra
         log_info "Removendo link simbólico legado: $target"

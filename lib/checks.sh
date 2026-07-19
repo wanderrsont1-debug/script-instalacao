@@ -96,6 +96,28 @@ check_base_packages_arch() {
     return 0
 }
 
+# Otimizar o dnf.conf para downloads mais rápidos (Fedora)
+#
+# Antes isto vivia DENTRO do 'if' de pacotes ausentes em
+# check_base_packages_fedora(): num sistema que já tivesse git/curl/tar/unzip/
+# fontconfig instalados, a otimização nunca era aplicada. Agora é uma função
+# própria, chamada sempre.
+#
+# NOTA: 'defaultyes=True' foi deliberadamente REMOVIDO daqui. Ele alterava o
+# padrão de TODO comando dnf do sistema, para sempre — inclusive os que o
+# usuário rodasse manualmente depois, onde um 'dnf remove' distraído passaria
+# a assumir "sim". O instalador já passa '-y' explicitamente onde precisa.
+optimize_dnf_conf() {
+    if grep -q "^max_parallel_downloads=10" /etc/dnf/dnf.conf 2>/dev/null; then
+        return 0
+    fi
+
+    log_info "Otimizando dnf.conf para downloads mais rápidos..."
+    sudo sh -c 'grep -q "^max_parallel_downloads" /etc/dnf/dnf.conf && sed -i "s/^max_parallel_downloads.*/max_parallel_downloads=10/" /etc/dnf/dnf.conf || echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf'
+    sudo sh -c 'grep -q "^fastestmirror" /etc/dnf/dnf.conf && sed -i "s/^fastestmirror.*/fastestmirror=False/" /etc/dnf/dnf.conf || echo "fastestmirror=False" >> /etc/dnf/dnf.conf'
+    return 0
+}
+
 # Verificar pacotes base necessários (Fedora)
 check_base_packages_fedora() {
     local missing=()
@@ -110,15 +132,6 @@ check_base_packages_fedora() {
     if [ ${#missing[@]} -gt 0 ]; then
         log_warn "Pacotes base ausentes: ${missing[*]}"
         log_info "Instalando pacotes base necessários..."
-        
-        # Otimizar DNF globalmente antes da primeira instalação se não estiver otimizado
-        if ! grep -q "^max_parallel_downloads=10" /etc/dnf/dnf.conf 2>/dev/null; then
-            log_info "Otimizando dnf.conf para downloads mais rápidos..."
-            sudo sh -c 'grep -q "^max_parallel_downloads" /etc/dnf/dnf.conf && sed -i "s/^max_parallel_downloads.*/max_parallel_downloads=10/" /etc/dnf/dnf.conf || echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf'
-            sudo sh -c 'grep -q "^fastestmirror" /etc/dnf/dnf.conf && sed -i "s/^fastestmirror.*/fastestmirror=False/" /etc/dnf/dnf.conf || echo "fastestmirror=False" >> /etc/dnf/dnf.conf'
-            sudo sh -c 'grep -q "^defaultyes" /etc/dnf/dnf.conf || echo "defaultyes=True" >> /etc/dnf/dnf.conf'
-        fi
-
         sudo dnf install -y "${missing[@]}"
         return $?
     fi
@@ -162,6 +175,9 @@ run_all_checks() {
             log_warn "Continuando sem AUR helper. Pacotes AUR serão ignorados."
         fi
     elif [ "${DISTRO:-}" = "fedora" ]; then
+        # Otimizar o dnf ANTES de qualquer download, sempre — inclusive quando
+        # os pacotes base já estão todos presentes.
+        optimize_dnf_conf
         check_base_packages_fedora || return 1
     fi
 

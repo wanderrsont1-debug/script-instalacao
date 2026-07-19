@@ -42,11 +42,19 @@ prompt_yes_no() {
     read -p "$prompt_msg" reply
     reply=${reply:-$default_val}
 
-    if [[ "$reply" =~ ^[SsYy]$ ]]; then
-        return 0
-    else
-        return 1
-    fi
+    # Normalizar antes de comparar: remover espaços e baixar para minúsculas.
+    # O teste antigo era '^[SsYy]$' — âncora de UM caractere. Quem respondia
+    # "sim" ou "yes" por extenso caía no 'else' e a etapa era pulada em
+    # silêncio, como se o usuário tivesse dito não.
+    reply="${reply//[[:space:]]/}"
+    reply="${reply,,}"
+
+    # Lista explícita (em vez de '^[sy]') para não aceitar palavras que apenas
+    # começam com s/y — "sair", por exemplo, não deve valer como "sim".
+    case "$reply" in
+        s|sim|y|yes) return 0 ;;
+        *)           return 1 ;;
+    esac
 }
 
 # ─────────────────────────────────────────────────────────────
