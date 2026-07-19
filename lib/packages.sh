@@ -458,8 +458,12 @@ setup_fedora_codecs() {
         --exclude=PackageKit-gstreamer-plugin \
         || log_warn "Falha ao atualizar o grupo multimídia."
 
+    # NOTA: 'libavcodec-freeworld' NÃO entra aqui de propósito. Ele é a
+    # alternativa para quem FICA no ffmpeg-free (adiciona codecs às libs
+    # livres); como acabamos de trocar para o ffmpeg completo, instalá-lo
+    # puxaria as libs do ffmpeg-free de volta e conflitaria com o ffmpeg.
     log_info "Instalando plugins gstreamer adicionais..."
-    sudo dnf install -y gstreamer1-plugins-bad-freeworld libavcodec-freeworld \
+    sudo dnf install -y gstreamer1-plugins-bad-freeworld \
         || log_warn "Alguns plugins gstreamer extras não foram instalados."
 
     # ── Aceleração de vídeo por hardware (VA-API) ────────────

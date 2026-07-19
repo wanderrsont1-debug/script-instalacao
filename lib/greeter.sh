@@ -39,17 +39,21 @@ ensure_sddm_installed() {
         if $is_fedora; then
             sudo dnf install -y sddm || true
         else
-            # -S (sem -y): a base já foi sincronizada com -Syu antes. Na 2ª
-            # tentativa forçamos um -Sy para o caso de a base estar defasada.
+            # -S (sem sync): a base já foi sincronizada com -Syu antes. Na 2ª
+            # tentativa forçamos um -Syu para o caso de a base estar defasada.
+            # IMPORTANTE: -Syu, NUNCA -Sy — '-Sy pkg' é partial upgrade e pode
+            # instalar um sddm linkado contra libs mais novas que as do sistema
+            # (SDDM que não sobe no boot). É a mesma política documentada em
+            # install_arch_packages().
             # Na 3ª tentativa adicionamos --overwrite '*' — causa comum e
             # silenciosa de falha repetida é conflito de arquivo (ex.: sddm
             # tentando instalar um arquivo que já existe no sistema), que
             # --noconfirm sozinho NÃO resolve e faz o pacman abortar a
             # transação inteira sempre do mesmo jeito.
             if [ "$attempt" -ge 3 ]; then
-                sudo pacman -Sy --needed --noconfirm --overwrite '*' sddm || true
+                sudo pacman -Syu --needed --noconfirm --overwrite '*' sddm || true
             elif [ "$attempt" -ge 2 ]; then
-                sudo pacman -Sy --needed --noconfirm sddm || true
+                sudo pacman -Syu --needed --noconfirm sddm || true
             else
                 sudo pacman -S --needed --noconfirm sddm || true
             fi
@@ -293,14 +297,18 @@ verify_display_manager() {
 
     # ── 1. Pacote instalado? ──────────────────────────────────
     log_info "1/6 — Verificando pacote ${dm_service}..."
-    local pkg_installed=false
+    # 'dm_pkg_present' (e não 'pkg_installed'): existe uma FUNÇÃO global
+    # pkg_installed() em packages.sh — mesmo nome numa variável local é uma
+    # armadilha para edições futuras (um 'if pkg_installed' sem '$' chamaria
+    # a função sem argumento e inverteria o teste em silêncio).
+    local dm_pkg_present=false
     if [ "${DISTRO:-arch}" = "fedora" ]; then
-        rpm -q "$dm_service" &>/dev/null && pkg_installed=true
+        rpm -q "$dm_service" &>/dev/null && dm_pkg_present=true
     else
-        pacman -Q "$dm_service" &>/dev/null && pkg_installed=true
+        pacman -Q "$dm_service" &>/dev/null && dm_pkg_present=true
     fi
 
-    if $pkg_installed; then
+    if $dm_pkg_present; then
         log_success "Pacote $dm_service instalado."
     else
         log_error "Pacote $dm_service NÃO instalado! Tentando corrigir automaticamente..."
@@ -498,7 +506,11 @@ verify_niri_environment() {
             log_success "noctalia encontrado: $(command -v noctalia)"
         else
             log_error "Binário 'noctalia' NÃO encontrado!"
-            log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
+            if [ "${DISTRO:-arch}" = "fedora" ]; then
+                log_info "  → Instale com: sudo dnf install noctalia"
+            else
+                log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
+            fi
             errors=$((errors + 1))
         fi
     else
