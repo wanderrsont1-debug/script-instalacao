@@ -96,6 +96,7 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 - **Flatpak + Flathub** — remote Flathub adicionado automaticamente
 - **Navegadores nunca via Flatpak** — no Fedora cada navegador vem da origem nativa recomendada pelo próprio projeto (COPR, repositório do fornecedor ou instalador oficial), por decisão de projeto
 - **UFW** — `deny incoming` / `allow outgoing`, ativo e habilitado no boot
+- **Sem agente polkit avulso concorrendo com o Noctalia** — o Noctalia Shell (5.x) já traz o próprio agente polkit (`polkit_agent = true` por padrão). Ao escolher Noctalia, o instalador desativa o autostart do agente externo instalado (`mate-polkit` no Fedora, `polkit-gnome` no Arch) via `~/.config/autostart/*.desktop` com `Hidden=true`, evitando a disputa pelo mesmo agente D-Bus; volta ao normal automaticamente se você reinstalar escolhendo o DMS
 
 ---
 

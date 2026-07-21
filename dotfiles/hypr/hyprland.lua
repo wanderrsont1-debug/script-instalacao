@@ -48,13 +48,18 @@ local menu        = "fuzzel"
 -- See https://wiki.hypr.land/Configuring/Basics/Autostart/
 
 -- Autostart necessary processes (like notifications daemons, status bars, etc.)
-hl.on("hyprland.start", function () 
+hl.on("hyprland.start", function ()
   -- Importante para o funcionamento correto do XDG Desktop Portal
   hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
-  
-  -- Agente de Autenticação Polkit para pedir senha em modo gráfico (usando o polkit-gnome já instalado)
-  hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
-  
+
+  -- SEM agente polkit avulso aqui: o Noctalia Shell (5.x) já traz o próprio
+  -- ([shell] polkit_agent = true por padrão em settings.toml). Rodar os dois
+  -- juntos faz a mesma corrida pelo nome D-Bus documentada em
+  -- noctalia.dev/plugins/polkit-agent — o diálogo de senha que aparece fica
+  -- ao sabor de qual dos dois venceu, nunca é o do Noctalia. O caminho antigo
+  -- (/usr/lib/polkit-gnome/...) também é específico do Arch e nem existe no
+  -- Fedora, então nesse caso já falhava silenciosamente.
+
   -- Inicia o Noctalia Shell em modo daemon
   hl.exec_cmd("noctalia --daemon")
 end)

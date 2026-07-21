@@ -118,6 +118,11 @@ main() {
         # arquivo Lua já cabeado para o Noctalia, sem seleção de includes.
         if [ "${COMPOSITOR_CHOICE:-niri}" = "niri" ]; then
             apply_shell_config || log_warn "Falha ao apontar o Niri para o shell escolhido."
+        elif [ "${SHELL_CHOICE:-dms}" = "noctalia" ] && declare -f disable_external_polkit_agent &>/dev/null; then
+            # Hyprland sempre usa Noctalia (README) — o mesmo conflito de agente
+            # polkit vale aqui, mas fora do fluxo do Niri não passa por
+            # apply_shell_config(). Chamado direto, sem depender de includes .kdl.
+            disable_external_polkit_agent "$(get_user_home)" || log_warn "Falha ao ajustar o agente polkit para o Noctalia."
         fi
     fi
 

@@ -203,6 +203,91 @@ deploy_dotfiles() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# Noctalia Shell (5.x) traz agente polkit próprio, ligado por padrão
+# ([shell] polkit_agent = true em settings.toml — confirmado no
+# settings.toml gerado por uma instalação real do Noctalia 5.0.0-beta.3).
+# A documentação oficial (noctalia.dev/plugins/polkit-agent) é explícita:
+# é preciso desativar qualquer outro agente polkit (polkit-gnome,
+# mate-polkit, lxpolkit, ...) ou os dois disputam o mesmo nome D-Bus.
+#
+# Isso acontece de verdade neste projeto: o agente externo instalado nos
+# essenciais (mate-polkit no Fedora, polkit-gnome no Arch) é iniciado
+# automaticamente via /etc/xdg/autostart/*.desktop pelo systemd --user
+# (xdg-desktop-autostart.target), na frente do agente do Noctalia. O
+# resultado observado é o log do Noctalia repetindo, em loop:
+#   "polkit agent disabled: ... An authentication agent already exists"
+# — ou seja, o diálogo de autenticação que aparece é sempre o do agente
+# externo (com tema/estilo inconsistente), nunca o do Noctalia, e depende
+# de qual dos dois venceu a corrida no login.
+#
+# A correção não desinstala o pacote do agente externo (ele continua
+# disponível como fallback fora de uma sessão Niri/Hyprland) — apenas
+# desativa sua entrada de autostart por usuário, do jeito padrão do XDG:
+# um .desktop de mesmo nome em ~/.config/autostart com Hidden=true.
+#
+# A detecção usa "Exec=.*polkit" (case-insensitive, cobrindo também
+# "policykit") em vez de uma lista fixa de nomes de pacote — checado nos
+# .rpm reais do Fedora 44, o nome do pacote quase nunca aparece no Exec=:
+#   mate-polkit  -> arquivo polkit-mate-authentication-agent-1.desktop,
+#                   Exec=/usr/libexec/polkit-mate-authentication-agent-1
+#   lxpolkit     -> arquivo lxpolkit.desktop, Exec=lxpolkit
+# Uma lista de nomes de pacote (ex.: "mate-polkit") não bateria com nenhum
+# dos dois — o padrão genérico por "polkit"/"policykit" no Exec= cobre
+# esses casos e qualquer outro agente (polkit-gnome no Arch, KDE, XFCE,
+# LXQt) sem precisar manter uma lista.
+# ─────────────────────────────────────────────────────────────
+disable_external_polkit_agent() {
+    local user_home="$1"
+    local autostart_dir="$user_home/.config/autostart"
+    local system_autostart="/etc/xdg/autostart"
+
+    [ -d "$system_autostart" ] || return 0
+
+    local disabled_any=0
+    local desktop_file base
+    for desktop_file in "$system_autostart"/*.desktop; do
+        [ -f "$desktop_file" ] || continue
+        base=$(basename "$desktop_file")
+        if grep -qiE '^Exec=.*(polkit|policykit)' "$desktop_file" 2>/dev/null; then
+            mkdir -p "$autostart_dir"
+            {
+                echo "[Desktop Entry]"
+                echo "Hidden=true"
+                echo "X-Niri-Installer-Note=Desativado automaticamente: o Noctalia Shell ja usa o proprio agente polkit (polkit_agent=true). Apague este arquivo para reativar."
+            } > "$autostart_dir/$base"
+            log_info "  Agente polkit externo desativado no autostart: $base (Noctalia usa o próprio)"
+            disabled_any=1
+        fi
+    done
+
+    if [ "$disabled_any" -eq 1 ]; then
+        local real_user
+        real_user=$(detect_user)
+        chown -R "$real_user":"$real_user" "$autostart_dir" 2>/dev/null || true
+    fi
+}
+
+# Reverte disable_external_polkit_agent(): remove só os overrides que NÓS
+# criamos (identificados pela marca X-Niri-Installer-Note), preservando
+# qualquer override manual do próprio usuário. Necessário para reinstalar
+# trocando de Noctalia para DMS sem deixar o usuário sem agente polkit algum
+# (DMS não teve o mesmo comportamento de agente embutido confirmado aqui).
+enable_external_polkit_agent() {
+    local user_home="$1"
+    local autostart_dir="$user_home/.config/autostart"
+    [ -d "$autostart_dir" ] || return 0
+
+    local f
+    for f in "$autostart_dir"/*.desktop; do
+        [ -f "$f" ] || continue
+        if grep -q "^X-Niri-Installer-Note=" "$f" 2>/dev/null; then
+            log_info "  Reativando agente polkit externo (shell DMS selecionado): $(basename "$f")"
+            rm -f "$f"
+        fi
+    done
+}
+
+# ─────────────────────────────────────────────────────────────
 # Selecionar o Desktop Shell nos configs do Niri já implantados.
 # O padrão dos dotfiles aponta para o DMS (includes "*-dms.kdl").
 # Se o usuário escolheu Noctalia, trocamos os includes para "*-noctalia.kdl".
@@ -215,6 +300,12 @@ apply_shell_config() {
     local cfg_dir="$user_home/.config/niri/cfg"
     local autostart="$cfg_dir/autostart.kdl"
     local keybinds="$cfg_dir/keybinds.kdl"
+
+    if [ "$choice" = "noctalia" ]; then
+        disable_external_polkit_agent "$user_home"
+    else
+        enable_external_polkit_agent "$user_home"
+    fi
 
     if [ ! -d "$cfg_dir" ]; then
         log_warn "Diretório de config do Niri não encontrado ($cfg_dir) — pulando seleção de shell."
