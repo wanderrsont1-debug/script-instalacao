@@ -156,7 +156,10 @@ install_entry() {
     # ── Pacote nativo ────────────────────────────────────────
     if pkg_available "$app"; then
         if [ "${DISTRO:-arch}" = "fedora" ]; then
-            sudo dnf install -y "$app"
+            # Usa o backend agnóstico em vez de repetir o comando do dnf aqui.
+            # (No Arch não dá para usar pkg_install: o caminho abaixo precisa
+            # inspecionar a saída do pacman para reconhecer conflito de pacote.)
+            pkg_install "$app"
             return $?
         fi
         # No Arch, distinguir falha por CONFLITO de uma falha comum: ex.: no
