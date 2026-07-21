@@ -174,37 +174,78 @@ get_user_home() {
     getent passwd "$user" | cut -d: -f6
 }
 
-# Fazer backup completo de ~/.config com timestamp antes de implantar dotfiles
-# Inspirado no donarch — evita perda de configurações existentes
-# Mantém apenas os 3 backups mais recentes para não acumular disco
-# indefinidamente, já que reinstalar (rodar install.sh de novo) é o
-# fluxo de atualização recomendado deste projeto.
+# Backup, com timestamp, das configurações que o instalador vai SOBRESCREVER.
+#
+# Antes isto copiava ~/.config inteiro. Num uso real esse diretório passa
+# facilmente de 400 MB (caches de navegador, estado de apps...), e como
+# reinstalar é o fluxo de atualização deste projeto, guardar 3 cópias
+# significava mais de 1 GB desperdiçado para proteger algumas dezenas de KB
+# de dotfiles — os únicos arquivos que o instalador realmente toca.
+#
+# Agora a lista é derivada de dotfiles/, então acompanha automaticamente
+# qualquer diretório novo adicionado ao repositório.
+# Recebe: $1 = diretório do repositório.
 backup_existing_configs() {
+    local repo_dir="$1"
     local user_home
     user_home=$(get_user_home)
     local config_dir="$user_home/.config"
+    local dotfiles_src="$repo_dir/dotfiles"
     local backup_dir="$user_home/.config.backup-$(date +%Y%m%d_%H%M%S)"
     local max_backups=3
 
-    if [ -d "$config_dir" ]; then
-        log_info "Criando backup completo de ~/.config em: $backup_dir"
-        cp -a "$config_dir" "$backup_dir"
-        log_success "Backup criado em: $backup_dir"
-
-        # Remover backups antigos além do limite (mantém os mais recentes)
-        local old_backups
-        mapfile -t old_backups < <(find "$user_home" -maxdepth 1 -type d -name '.config.backup-*' | sort -r | tail -n +$((max_backups + 1)))
-        if [ "${#old_backups[@]}" -gt 0 ]; then
-            log_info "Removendo ${#old_backups[@]} backup(s) antigo(s) de ~/.config (mantendo os $max_backups mais recentes)..."
-            for old in "${old_backups[@]}"; do
-                rm -rf "$old"
-            done
-        fi
-        return 0
-    else
+    if [ ! -d "$config_dir" ]; then
         log_warn "Diretório ~/.config não encontrado, backup ignorado."
         return 0
     fi
+    if [ ! -d "$dotfiles_src" ]; then
+        log_warn "Diretório dotfiles/ não encontrado — backup ignorado."
+        return 0
+    fi
+
+    # Quais itens de ~/.config seriam substituídos por esta instalação?
+    local to_backup=()
+    local item name
+    for item in "$dotfiles_src"/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        case "$name" in
+            .bashrc|.zshrc|.bash_profile|.Xresources) continue ;;  # vão para o $HOME
+            noctalia) continue ;;                                  # vai para ~/.local/state
+        esac
+        # 'if' explícito, e não '[ ... ] && to_backup+=(...)': sendo o último
+        # comando do laço, a forma com && deixaria status 1 quando o item não
+        # existisse, e o 'set -e' abortaria o instalador no primeiro dotfile
+        # ainda não presente no sistema — ou seja, sempre, numa instalação limpa.
+        if [ -e "$config_dir/$name" ]; then
+            to_backup+=("$name")
+        fi
+    done
+
+    if [ ${#to_backup[@]} -eq 0 ]; then
+        log_info "Nenhuma configuração existente a salvar — backup não é necessário."
+        return 0
+    fi
+
+    log_info "Salvando ${#to_backup[@]} configuração(ões) existente(s) em: $backup_dir"
+    mkdir -p "$backup_dir"
+    for name in "${to_backup[@]}"; do
+        cp -a "$config_dir/$name" "$backup_dir/" 2>/dev/null || \
+            log_warn "  Falha ao salvar $name (seguindo mesmo assim)."
+    done
+    log_success "Backup criado em: $backup_dir (${to_backup[*]})"
+
+    # Remover backups antigos além do limite (mantém os mais recentes)
+    local old_backups
+    mapfile -t old_backups < <(find "$user_home" -maxdepth 1 -type d -name '.config.backup-*' | sort -r | tail -n +$((max_backups + 1)))
+    if [ "${#old_backups[@]}" -gt 0 ]; then
+        log_info "Removendo ${#old_backups[@]} backup(s) antigo(s) (mantendo os $max_backups mais recentes)..."
+        local old
+        for old in "${old_backups[@]}"; do
+            rm -rf "$old"
+        done
+    fi
+    return 0
 }
 
 # Verificação de conectividade com a internet

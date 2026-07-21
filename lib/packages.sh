@@ -221,8 +221,13 @@ install_package_list() {
         local native=() special=()
         for pkg in "${packages[@]}"; do
             case "$pkg" in
-                flatpak:*|copr:*|curl:*) special+=("$pkg") ;;
-                *)                       native+=("$pkg") ;;
+                # 'repo:' estava faltando aqui: uma entrada como
+                # 'repo:vivaldi-stable@https://...' era tratada como nome de
+                # pacote e ia literal para o dnf, onde o --skip-broken a
+                # descartava sem erro nenhum — exatamente a classe de falha
+                # silenciosa que o resto deste arquivo já combate.
+                flatpak:*|copr:*|curl:*|repo:*) special+=("$pkg") ;;
+                *)                              native+=("$pkg") ;;
             esac
         done
 
@@ -553,11 +558,15 @@ install_fedora_packages() {
             libsecret
             xdg-desktop-portal
             xdg-desktop-portal-gtk
-            # NOTA: 'polkit-gnome' NÃO existe no Fedora (é o nome usado no Arch).
-            # Sem um agente polkit, nenhuma janela de autenticação aparece no
-            # Niri — montar discos, mudar perfil de energia, etc. falham em
-            # silêncio. 'mate-polkit' é o agente GTK equivalente no Fedora.
-            mate-polkit
+            # NENHUM agente polkit externo é instalado aqui, de propósito.
+            # Os dois shells suportados já trazem o seu:
+            #   DMS      → /usr/share/quickshell/dms/Services/PolkitService.qml
+            #   Noctalia → "[shell] polkit_agent = true" + painel 'polkit'
+            # O 'mate-polkit' que ficava nesta lista era peso morto: o .desktop
+            # dele tem "OnlyShowIn=MATE", então sob o Niri/Hyprland o autostart
+            # XDG nunca o iniciava. Quando iniciado à mão, só servia para
+            # disputar o D-Bus com o agente do shell e provocar o erro
+            # "An authentication agent already exists for the given subject".
             gstreamer1-plugin-libav
             gstreamer1-plugins-good
             gstreamer1-plugins-bad-free
@@ -618,14 +627,22 @@ install_fedora_packages() {
         else
             log_success "Todos os ${#packages[@]} pacotes solicitados estão instalados."
         fi
-
-        # Desktop Shell escolhido (DMS ou Noctalia)
-        install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
     fi
+
+    # Desktop Shell escolhido (DMS ou Noctalia) — FORA do 'if' dos essenciais.
+    # Motivo: ao reinstalar só para trocar de shell, o caminho natural é
+    # responder "não" aos essenciais (já estão instalados). Quando esta chamada
+    # ficava dentro do 'if', o shell novo nunca era instalado, embora as configs
+    # do Niri já tivessem sido apontadas para ele — resultado: sessão sem shell.
+    # É idempotente: se já estiver instalado, o dnf não faz nada.
+    install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
 
     if prompt_yes_no "Deseja instalar a fonte Meslo Nerd Font para evitar ícones quebrados?" "S"; then
         install_meslo_font
     fi
+
+    # Tema de cursor declarado em dotfiles/niri/cfg/misc.kdl.
+    install_cursor_theme || true
 
     # ── Etapas interativas, em paridade com o fluxo do Arch ──
     # A ordem espelha install_arch_packages(): navegadores, codecs, libs e,
@@ -719,15 +736,23 @@ install_arch_packages() {
         # chegaria a ser instalado. Com o SDDM primeiro, o sistema já entra
         # em modo gráfico no próximo boot mesmo que o shell falhe depois.
         install_package_list "$pkg_dir/arch-sddm.txt" "SDDM e dependências Qt"
-
-        # 3. Desktop Shell escolhido (DMS ou Noctalia beta)
-        install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
     fi
+
+    # 3. Desktop Shell escolhido (DMS ou Noctalia beta) — FORA do 'if' acima.
+    # Motivo: ao reinstalar só para trocar de shell, o caminho natural é
+    # responder "não" aos essenciais (já estão instalados). Quando esta chamada
+    # ficava dentro do 'if', o shell novo nunca era instalado, embora as configs
+    # do Niri já tivessem sido apontadas para ele — resultado: sessão sem shell.
+    # É idempotente graças ao '--needed' do pacman.
+    install_shell_packages || log_warn "Shell (${SHELL_CHOICE:-dms}) pode não ter sido instalado."
 
     # 3. Fontes
     if prompt_yes_no "Deseja instalar as fontes do ambiente (Noto, Cantarell, Meslo Nerd)?" "S"; then
         install_package_list "$pkg_dir/arch-fonts.txt" "Fontes"
     fi
+
+    # Tema de cursor declarado em dotfiles/niri/cfg/misc.kdl.
+    install_cursor_theme || true
 
     # 4. Navegadores — menu de seleção múltipla
     install_browsers_arch "$pkg_dir/arch-browsers.txt"
@@ -776,9 +801,14 @@ select_and_install_menu() {
             pkg="$line"
             label="$line"
         fi
-        # Remover espaços em branco nas pontas
-        pkg="$(echo "$pkg" | xargs)"
-        label="$(echo "$label" | xargs)"
+        # Remover espaços em branco nas pontas.
+        # Feito com expansão do próprio bash, e não com 'xargs': o xargs
+        # interpreta aspas e apóstrofos do texto. Um rótulo em português como
+        # "Editor do usuário's" era truncado para "Editor do", e aspas sem par
+        # chegavam a fazer o xargs falhar — corrompendo silenciosamente o nome
+        # do pacote ou o rótulo exibido no menu.
+        pkg="${pkg#"${pkg%%[![:space:]]*}"}"       ; pkg="${pkg%"${pkg##*[![:space:]]}"}"
+        label="${label#"${label%%[![:space:]]*}"}" ; label="${label%"${label##*[![:space:]]}"}"
 
         [ -z "$pkg" ] && continue
         pkgs+=("$pkg")
@@ -806,6 +836,7 @@ select_and_install_menu() {
     done
     echo ""
 
+    local choices
     read -p "Sua escolha: " choices
 
     # Expandir "todos"/"all" para todos os índices
@@ -869,6 +900,58 @@ install_optional_apps_fedora() {
 
 install_browsers_fedora() {
     select_and_install_menu "$1" "Navegadores (escolha um ou mais)"
+}
+
+# ─────────────────────────────────────────────────────────────
+# UTILITÁRIO: Instalar o tema de cursor Bibata-Modern-Ice
+#
+# A config do Niri (cfg/misc.kdl) declara este tema. Ele NÃO existe nos
+# repositórios do Fedora (nem como RPM, nem em COPR mantido), e antes o
+# instalador não o instalava de forma alguma: o niri caía no cursor padrão
+# em silêncio, e a config apontava ainda por cima para uma variante
+# ("Bibata-Modern-Amber") que não existia em lugar nenhum.
+#
+# No Arch existe no AUR; nas demais distros usamos o tarball oficial do
+# projeto, mesmo padrão já usado por install_meslo_font().
+# ─────────────────────────────────────────────────────────────
+install_cursor_theme() {
+    local theme="Bibata-Modern-Ice"
+    local icons_dir
+    icons_dir="$(get_user_home)/.local/share/icons"
+
+    if [ -d "$icons_dir/$theme" ] || [ -d "/usr/share/icons/$theme" ]; then
+        log_info "Tema de cursor $theme já presente."
+        return 0
+    fi
+
+    # Arch: preferir o pacote (recebe atualização junto com o sistema).
+    if [ "${DISTRO:-arch}" != "fedora" ] && [ "${AUR_HELPER:-none}" != "none" ]; then
+        log_info "Instalando o tema de cursor $theme via AUR..."
+        if "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) bibata-cursor-theme; then
+            log_success "Tema de cursor instalado via AUR."
+            return 0
+        fi
+        log_warn "  Falha via AUR — tentando o tarball oficial."
+    fi
+
+    log_info "Instalando o tema de cursor $theme (release oficial)..."
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    # 'releases/latest/download' segue sempre a versão mais recente, sem fixar
+    # um número de versão que envelheceria dentro do repositório.
+    local url="https://github.com/ful1e5/Bibata_Cursor/releases/latest/download/${theme}.tar.xz"
+
+    if curl -fLo "$temp_dir/cursor.tar.xz" "$url" && tar -xf "$temp_dir/cursor.tar.xz" -C "$temp_dir"; then
+        mkdir -p "$icons_dir"
+        cp -a "$temp_dir/$theme" "$icons_dir/"
+        rm -rf "$temp_dir"
+        log_success "Tema de cursor $theme instalado em $icons_dir."
+        return 0
+    fi
+
+    rm -rf "$temp_dir"
+    log_warn "Falha ao instalar o tema de cursor — o sistema usará o cursor padrão."
+    return 1
 }
 
 # ─────────────────────────────────────────────────────────────

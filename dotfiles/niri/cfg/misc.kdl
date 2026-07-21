@@ -10,9 +10,16 @@
         XDG_SESSION_TYPE "wayland"
     }
 
+    // Fonte ÚNICA do cursor, válida para DMS e Noctalia.
+    // Antes havia um segundo bloco 'cursor' em dms/cursor.kdl (tamanho 28),
+    // incluído depois deste — o niri aceitava os dois e o último vencia, então
+    // o tamanho 24 daqui nunca teve efeito. O tema também estava errado:
+    // "Bibata-Modern-Amber" não existe nos repositórios do Fedora e não era
+    // instalado por este script, então o cursor caía no padrão do sistema.
+    // O instalador agora instala Bibata-Modern-Ice (install_cursor_theme).
     cursor {
-        xcursor-theme "Bibata-Modern-Amber"
-        xcursor-size 24
+        xcursor-theme "Bibata-Modern-Ice"
+        xcursor-size 28
     }
 
     debug {

@@ -14,6 +14,7 @@
 
 set -e          # Interrompe imediatamente se qualquer comando falhar
 set -E          # Faz o trap ERR valer também dentro de funções e subshells
+set -u          # Erro ao usar variável não definida (pega typo em nome de variável)
 set -o pipefail # Propaga falhas em pipes
 
 # Obter diretório do repositório
@@ -29,7 +30,24 @@ source "$REPO_DIR/lib/utils.sh"
 LOG_DIR="$REPO_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/install-$(date +%Y%m%d_%H%M%S).log"
-exec > >(tee >(sed -u $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' >> "$LOG_FILE")) 2>&1
+
+# Um ÚNICO 'tee', sem substituição de processo aninhada.
+#
+# Antes era 'tee >(sed -u ... >> LOG)': o sed rodava num segundo processo
+# filho que era encerrado junto com o script, com saída ainda em buffer.
+# Medido: de 501 linhas geradas, só 158 chegavam ao arquivo — o log terminava
+# no meio da instalação, justamente escondendo o resumo final das verificações.
+# Com um tee só, o 'wait' no EXIT garante que tudo seja gravado; os códigos de
+# cor são removidos no fim, de uma vez.
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+_flush_log() {
+    # Fechar os descritores faz o tee ver EOF; o wait dá a ele tempo de gravar.
+    exec 1>&- 2>&-
+    wait 2>/dev/null || true
+    sed -i $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' "$LOG_FILE" 2>/dev/null || true
+}
+trap _flush_log EXIT
 
 # NUNCA morrer em silêncio: se o 'set -e' for interromper o instalador, este
 # trap imprime exatamente onde e por quê. Antes disso, uma falha inesperada
@@ -111,18 +129,18 @@ main() {
     # Guardas '|| log_warn': nenhuma falha de dotfile pode impedir as etapas
     # críticas seguintes (configuração do SDDM e habilitação do boot gráfico).
     if [ -d "$REPO_DIR/dotfiles" ]; then
-        backup_existing_configs || log_warn "Backup de ~/.config falhou — continuando."
+        backup_existing_configs "$REPO_DIR" || log_warn "Backup das configs existentes falhou — continuando."
         deploy_dotfiles "$REPO_DIR" || log_warn "Falha ao implantar dotfiles — revise os avisos acima."
+
+        # Ajustes do shell que independem do compositor (agente polkit e, no
+        # caso do Noctalia, a config base em ~/.local/state/noctalia).
+        apply_shell_common "$REPO_DIR" || log_warn "Falha ao aplicar ajustes do shell escolhido."
+
         # Apontar o Niri para o shell escolhido (DMS ou Noctalia).
         # Específico do Niri (troca de includes .kdl); o Hyprland usa um único
         # arquivo Lua já cabeado para o Noctalia, sem seleção de includes.
         if [ "${COMPOSITOR_CHOICE:-niri}" = "niri" ]; then
             apply_shell_config || log_warn "Falha ao apontar o Niri para o shell escolhido."
-        elif [ "${SHELL_CHOICE:-dms}" = "noctalia" ] && declare -f disable_external_polkit_agent &>/dev/null; then
-            # Hyprland sempre usa Noctalia (README) — o mesmo conflito de agente
-            # polkit vale aqui, mas fora do fluxo do Niri não passa por
-            # apply_shell_config(). Chamado direto, sem depender de includes .kdl.
-            disable_external_polkit_agent "$(get_user_home)" || log_warn "Falha ao ajustar o agente polkit para o Noctalia."
         fi
     fi
 

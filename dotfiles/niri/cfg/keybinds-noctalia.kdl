@@ -12,6 +12,16 @@ binds {
     // ─── Central de Controle (Control Center) ───
     Mod+Shift+S                         hotkey-overlay-title="Toggle Control Center" { spawn "noctalia" "msg" "panel-toggle" "control-center"; }
 
+    // ─── Painéis do Noctalia ───
+    // Ids validados contra o IPC do Noctalia 5.x ('noctalia msg panel-toggle'
+    // lista os disponíveis: clipboard, control-center, launcher, session,
+    // wallpaper, tray-drawer...). Sem estes atalhos, recursos que o Noctalia
+    // já traz ativos — histórico de área de transferência, troca de papel de
+    // parede — só eram acessíveis pela barra, com o mouse.
+    Mod+V                               hotkey-overlay-title="Clipboard: histórico" { spawn "noctalia" "msg" "panel-toggle" "clipboard"; }
+    Mod+Shift+B                         hotkey-overlay-title="Wallpaper: seletor"   { spawn "noctalia" "msg" "panel-toggle" "wallpaper"; }
+    Alt+Tab                             hotkey-overlay-title="Alternar janelas"     { spawn "noctalia" "msg" "window-switcher"; }
+
     // ─── Applications ───
     Mod+Return                          hotkey-overlay-title="Open Terminal: Ghostty" { spawn "ghostty"; }
     CTRL+ALT+T                          hotkey-overlay-title="Open Terminal: Ghostty" { spawn "ghostty"; }

@@ -296,7 +296,7 @@ verify_display_manager() {
     local warnings=0
 
     # ── 1. Pacote instalado? ──────────────────────────────────
-    log_info "1/6 — Verificando pacote ${dm_service}..."
+    log_info "1/7 — Verificando pacote ${dm_service}..."
     # 'dm_pkg_present' (e não 'pkg_installed'): existe uma FUNÇÃO global
     # pkg_installed() em packages.sh — mesmo nome numa variável local é uma
     # armadilha para edições futuras (um 'if pkg_installed' sem '$' chamaria
@@ -321,7 +321,7 @@ verify_display_manager() {
     fi
 
     # ── 2. Serviço habilitado? ────────────────────────────────
-    log_info "2/6 — Verificando ${dm_service}.service..."
+    log_info "2/7 — Verificando ${dm_service}.service..."
     if systemctl is-enabled "${dm_service}.service" &>/dev/null; then
         log_success "${dm_service}.service habilitado."
     else
@@ -336,7 +336,7 @@ verify_display_manager() {
     fi
 
     # ── 3. Target padrão ──────────────────────────────────────
-    log_info "3/6 — Verificando target padrão do systemd..."
+    log_info "3/7 — Verificando target padrão do systemd..."
     local current_target
     current_target=$(systemctl get-default 2>/dev/null)
     if [ "$current_target" = "graphical.target" ]; then
@@ -355,7 +355,7 @@ verify_display_manager() {
     fi
 
     # ── 4. DMs conflitantes ───────────────────────────────────
-    log_info "4/6 — Verificando DMs conflitantes..."
+    log_info "4/7 — Verificando DMs conflitantes..."
     local all_dms=(sddm greetd lightdm gdm ly lemurs emptty)
     local found_conflict=false
     for other_dm in "${all_dms[@]}"; do
@@ -376,7 +376,7 @@ verify_display_manager() {
     # ── 5. Verificações específicas ───────────────────────────
     # ── SDDM ──
         # 5a. Binário do SDDM
-        log_info "5/6 — Verificando binário sddm..."
+        log_info "5/7 — Verificando binário sddm..."
         if command -v sddm &>/dev/null; then
             log_success "Binário: $(command -v sddm)"
         else
@@ -385,7 +385,7 @@ verify_display_manager() {
         fi
 
         # 5b. Backend gráfico (Xorg ou Wayland)
-        log_info "6/6 — Verificando backend gráfico para o SDDM..."
+        log_info "6/7 — Verificando backend gráfico para o SDDM..."
         local has_xorg=false
         local has_wl_greeter=false
         { [ -x "/usr/bin/Xorg" ] || [ -x "/usr/lib/Xorg" ]; } && has_xorg=true
@@ -418,7 +418,7 @@ verify_display_manager() {
 
         # 5c. Dependências Qt (Arch)
         if [ "${DISTRO:-arch}" != "fedora" ]; then
-            log_info "    Verificando dependências Qt..."
+            log_info "7/7 — Verificando dependências Qt e tema..."
             local qt_missing=()
             for dep in qt6-5compat qt6-svg qt6-virtualkeyboard qt6-multimedia; do
                 pacman -Q "$dep" &>/dev/null || qt_missing+=("$dep")
@@ -576,6 +576,8 @@ verify_niri_environment() {
         "$niri_cfg_dir/cfg/keybinds-${shell_suffix}.kdl"
         "$niri_cfg_dir/cfg/autostart.kdl"
         "$niri_cfg_dir/cfg/autostart-${shell_suffix}.kdl"
+        "$niri_cfg_dir/cfg/shell-extra.kdl"
+        "$niri_cfg_dir/cfg/shell-extra-${shell_suffix}.kdl"
     )
     for kdl_file in "${required_kdl[@]}"; do
         if [ -f "$kdl_file" ] || [ -L "$kdl_file" ]; then
@@ -609,6 +611,21 @@ verify_niri_environment() {
         else
             log_warn "spawn-at-startup do ${shell_choice} ausente/comentado em autostart-${shell_suffix}.kdl!"
             log_info "  → O ${shell_choice} não iniciará automaticamente com o Niri."
+            warnings=$((warnings + 1))
+        fi
+
+        # 5c. Agente polkit avulso disputando com o do shell.
+        # Esta É a causa raiz real do erro "An authentication agent already
+        # exists" observado em campo: uma linha spawn-at-startup de agente
+        # polkit adicionada à mão ao autostart. O instalador não gera nada
+        # assim, mas uma config editada manualmente sobrevive à reinstalação
+        # se o usuário restaurar o arquivo de um backup.
+        local stray_polkit
+        stray_polkit=$(grep -iE '^[[:space:]]*spawn-at-startup.*(polkit|policykit)' "$real_autostart" 2>/dev/null || true)
+        if [ -n "$stray_polkit" ]; then
+            log_warn "Agente polkit avulso no autostart do Niri — conflita com o agente embutido do ${shell_choice}:"
+            log_warn "  → $stray_polkit"
+            log_info  "  Remova essa linha: ${shell_choice} já fornece o próprio agente de autenticação."
             warnings=$((warnings + 1))
         fi
     fi
@@ -698,7 +715,11 @@ verify_hyprland_environment() {
         log_success "noctalia encontrado: $(command -v noctalia)"
     else
         log_error "Binário 'noctalia' NÃO encontrado!"
-        log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
+        if [ "${DISTRO:-arch}" = "fedora" ]; then
+            log_info "  → Instale com: sudo dnf install noctalia"
+        else
+            log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
+        fi
         errors=$((errors + 1))
     fi
 
@@ -798,6 +819,36 @@ verify_hyprland_environment() {
 # — abordagem idiomática do DMS no niri — e desabilitar o dms.service,
 # garantindo uma única instância de forma determinística.
 # ─────────────────────────────────────────────────────────────
+# Serviços de usuário do systemd que iniciam o DMS. Declarado uma vez só,
+# usado por fix_dms_double_bar() e por disable_dms_user_services().
+DMS_USER_SERVICES=(dms.service dms-shell.service dankmaterialshell.service)
+
+# Desabilita todos os serviços de usuário do DMS.
+# Usado ao escolher o Noctalia: sem isto, quem instalou com DMS antes ficava
+# com o dms.service habilitado e, ao migrar para o Noctalia, o DMS subia junto
+# na mesma sessão — duas barras, de dois shells diferentes. O caminho contrário
+# (Noctalia → DMS) já era coberto por fix_dms_double_bar().
+disable_dms_user_services() {
+    local reason="$1"
+    local svc
+    local disabled_any=false
+
+    for svc in "${DMS_USER_SERVICES[@]}"; do
+        if systemctl --user list-unit-files 2>/dev/null | grep -q "^${svc}"; then
+            if systemctl --user is-enabled "$svc" &>/dev/null; then
+                log_info "Desabilitando ${svc} (${reason})..."
+                systemctl --user disable "$svc" &>/dev/null || true
+                disabled_any=true
+            fi
+        fi
+    done
+
+    if $disabled_any; then
+        log_success "Serviços do DMS desabilitados (${reason})."
+    fi
+    return 0
+}
+
 fix_dms_double_bar() {
     log_info "Definindo mecanismo único de inicialização do DMS (evita duas topbars no 1º boot)..."
 
@@ -811,8 +862,7 @@ fix_dms_double_bar() {
     local real_autostart
     real_autostart=$(readlink -f "$niri_autostart" 2>/dev/null || echo "$niri_autostart")
 
-    # Serviços de usuário do systemd que também iniciam o DMS
-    local dms_user_services=(dms.service dms-shell.service dankmaterialshell.service)
+    local dms_user_services=("${DMS_USER_SERVICES[@]}")
 
     if ! grep -q '^[[:space:]]*spawn-at-startup[[:space:]]*"dms"' "$real_autostart" 2>/dev/null; then
         # Niri não inicia o DMS sozinho — habilitar o serviço systemd como fallback
@@ -858,8 +908,13 @@ setup_greeter() {
     ensure_sddm_installed || log_warn "SDDM pode não estar instalado — revise os avisos acima."
     configure_display_manager "$repo_dir"
     enable_systemd_services
-    # A correção de "duas topbars" é específica do DMS. Com Noctalia não se aplica.
+    # A correção de "duas topbars" é específica do DMS.
     if [ "${SHELL_CHOICE:-dms}" = "dms" ]; then
         fix_dms_double_bar
+    else
+        # Com o Noctalia, qualquer serviço do DMS que tenha sobrado de uma
+        # instalação anterior precisa ser desligado — senão os dois shells
+        # sobem na mesma sessão.
+        disable_dms_user_services "shell escolhido: ${SHELL_CHOICE:-dms}"
     fi
 }

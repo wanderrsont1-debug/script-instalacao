@@ -1,0 +1,8 @@
+// ────────── Fragmentos extras do shell — Noctalia ──────────
+// O Noctalia Shell (5.x) não gera fragmentos .kdl para o niri: ele lê o
+// próprio settings.toml (~/.local/state/noctalia/settings.toml) e aplica
+// tema, barra e cores por conta própria, via IPC.
+//
+// Por isso este arquivo é intencionalmente vazio. Ele existe para que
+// config.kdl tenha sempre um include válido, seja qual for o shell —
+// o mesmo padrão usado por autostart.kdl e keybinds.kdl.

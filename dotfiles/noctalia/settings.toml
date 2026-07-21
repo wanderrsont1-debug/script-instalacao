@@ -1,0 +1,70 @@
+# ════════════════════════════════════════════════════════════════════
+# Noctalia Shell — configuração base implantada pelo instalador.
+#
+# Destino: ~/.local/state/noctalia/settings.toml
+# (o Noctalia 5.x guarda o estado aqui, NÃO em ~/.config/noctalia)
+#
+# O instalador só copia este arquivo se ainda NÃO existir um settings.toml.
+# Assim, reinstalar nunca sobrescreve os ajustes que você fez pela interface.
+#
+# ── O QUE FOI DELIBERADAMENTE OMITIDO ──────────────────────────────
+# Este arquivo nasceu de uma instalação real, mas foi sanitizado antes de
+# entrar num repositório PÚBLICO. Não inclua de volta:
+#
+#   • [plugin_settings."noctalia/wallhaven"] api_key
+#       → é uma credencial pessoal do Wallhaven. Configure pela interface:
+#         Settings → Plugins → Wallhaven.
+#   • wallpaper.directory / wallpaper.default / wallpaper.monitors.*
+#       → apontavam para um HD externo (/run/media/...) que não existe em
+#         outra máquina. Escolha o seu em Settings → Wallpaper.
+#   • [lockscreen_widgets] e qualquer chave com sufixo "@<CONECTOR>"
+#       → presas a um monitor específico (ex.: "@HDMI-A-1"). Em outra tela o
+#         widget ficaria posicionado fora da área visível.
+#   • [plugin_settings."apex077/eyecare"]
+#       → sobra de um plugin não instalado; gerava um aviso repetido no log
+#         ("no loaded plugin with this id") a cada recarga de config.
+# ════════════════════════════════════════════════════════════════════
+
+config_version = 2
+
+[audio]
+enable_sounds = true
+
+# Barra superior. O widget "wallhaven" foi retirado da lista de propósito:
+# ele depende do plugin homônimo, que por sua vez exige a chave de API acima.
+# Com o plugin ausente, um widget órfão apareceria quebrado na barra.
+[bar.default]
+center = [ "clock", "brightness" ]
+start = [ "launcher", "wallpaper", "workspaces", "temp" ]
+
+[brightness]
+# Controle de brilho por DDC/CI (monitores externos). Sem o ddcutil instalado
+# o Noctalia simplesmente ignora esta opção — não quebra nada.
+enable_ddcutil = true
+
+[control_center]
+hidden_tabs = [ "monitor" ]
+sidebar = "full"
+sidebar_section = "full"
+
+[lockscreen]
+fingerprint = false
+
+[shell]
+# Agente polkit EMBUTIDO do Noctalia — é o que exibe o diálogo de senha para
+# montar discos, trocar perfil de energia, etc. Deve ficar ligado, e nenhum
+# outro agente (polkit-gnome, mate-polkit, lxpolkit...) deve ser iniciado em
+# paralelo: dois agentes disputam o mesmo nome no D-Bus e um deles falha com
+# "An authentication agent already exists for the given subject".
+polkit_agent = true
+screen_time_enabled = true
+
+    [shell.launcher]
+    app_grid = true
+    categories = false
+
+    [shell.panel]
+    launcher_placement = "attached"
+
+[theme]
+builtin = "Ayu"

@@ -119,6 +119,19 @@ deploy_dotfiles() {
             continue
         fi
 
+        # 'noctalia' NÃO vai para ~/.config: o Noctalia 5.x lê o settings.toml
+        # de ~/.local/state/noctalia/. Copiar para cá criaria um diretório que
+        # o shell nunca lê, dando a impressão de que a config foi aplicada.
+        # Quem implanta esse arquivo é deploy_noctalia_config().
+        if [ "$name" = "noctalia" ]; then
+            continue
+        fi
+
+        # O DankMaterialShell só é relevante se o DMS for o shell escolhido.
+        if [ "$name" = "DankMaterialShell" ] && [ "${SHELL_CHOICE:-dms}" != "dms" ]; then
+            continue
+        fi
+
         # Ignorar arquivos que vão para a raiz do $HOME (tratados no passo 2)
         if [[ "$name" != .bashrc && "$name" != .zshrc && "$name" != .bash_profile && "$name" != .Xresources ]]; then
             copy_item "$item" "$config_dir/$name"
@@ -180,19 +193,27 @@ deploy_dotfiles() {
 
     # 5. Ajustar propriedade dos arquivos copiados para o usuário correto
     #    (necessário quando o script é chamado via sudo — cp -a preserva o dono root)
+    #
+    #    A lista é derivada do próprio dotfiles/ em vez de ser fixa: antes, um
+    #    diretório novo adicionado ao repositório era implantado mas ficava
+    #    pertencendo ao root, e só se descobria quando o app não conseguia
+    #    salvar a própria configuração.
     log_info "Ajustando propriedade dos arquivos para o usuário $real_user..."
-    chown -R "$real_user":"$real_user" \
-        "$config_dir/niri" \
-        "$config_dir/hypr" \
-        "$config_dir/DankMaterialShell" \
-        "$config_dir/alacritty" \
-        "$config_dir/cava" \
-        "$config_dir/environment.d" \
-        "$config_dir/fish" \
-        "$config_dir/fuzzel" \
-        "$config_dir/ghostty" \
-        "$config_dir/micro" \
-        2>/dev/null || true
+    for item in "$dotfiles_src"/*; do
+        [ -e "$item" ] || continue
+        local dname
+        dname=$(basename "$item")
+        # 'noctalia' não vai para ~/.config (o Noctalia usa ~/.local/state);
+        # quem cuida dele é deploy_noctalia_config().
+        # 'if' explícito em vez de '[ ... ] && continue': na forma com && o
+        # teste falso deixa a lista com status 1 e, sem o '|| log_warn' do
+        # chamador, o 'set -e' abortaria o instalador aqui.
+        if [ "$dname" = "noctalia" ]; then
+            continue
+        fi
+        [ -e "$config_dir/$dname" ] || continue
+        chown -R "$real_user":"$real_user" "$config_dir/$dname" 2>/dev/null || true
+    done
     # Arquivos raiz do home
     for hfile in .bashrc .zshrc .bash_profile .Xresources; do
         [ -f "$user_home/$hfile" ] && chown "$real_user":"$real_user" "$user_home/$hfile" || true
@@ -202,44 +223,74 @@ deploy_dotfiles() {
     log_info  "O repositório clonado pode ser removido com segurança após a instalação."
 }
 
-# ─────────────────────────────────────────────────────────────
-# Noctalia Shell (5.x) traz agente polkit próprio, ligado por padrão
-# ([shell] polkit_agent = true em settings.toml — confirmado no
-# settings.toml gerado por uma instalação real do Noctalia 5.0.0-beta.3).
-# A documentação oficial (noctalia.dev/plugins/polkit-agent) é explícita:
-# é preciso desativar qualquer outro agente polkit (polkit-gnome,
-# mate-polkit, lxpolkit, ...) ou os dois disputam o mesmo nome D-Bus.
+# ═════════════════════════════════════════════════════════════
+# AGENTE POLKIT — por que este código existe
 #
-# Isso acontece de verdade neste projeto: o agente externo instalado nos
-# essenciais (mate-polkit no Fedora, polkit-gnome no Arch) é iniciado
-# automaticamente via /etc/xdg/autostart/*.desktop pelo systemd --user
-# (xdg-desktop-autostart.target), na frente do agente do Noctalia. O
-# resultado observado é o log do Noctalia repetindo, em loop:
-#   "polkit agent disabled: ... An authentication agent already exists"
-# — ou seja, o diálogo de autenticação que aparece é sempre o do agente
-# externo (com tema/estilo inconsistente), nunca o do Noctalia, e depende
-# de qual dos dois venceu a corrida no login.
+# Os DOIS shells suportados trazem agente polkit próprio:
+#   • Noctalia 5.x → "[shell] polkit_agent = true" no settings.toml, e um
+#     painel dedicado ('noctalia msg panel-toggle polkit').
+#   • DMS         → /usr/share/quickshell/dms/Services/PolkitService.qml.
+# Rodar um agente externo em paralelo faz os dois disputarem o mesmo nome no
+# D-Bus; o perdedor registra "An authentication agent already exists for the
+# given subject" e o diálogo de senha que aparece passa a depender de quem
+# venceu a corrida no login.
 #
-# A correção não desinstala o pacote do agente externo (ele continua
-# disponível como fallback fora de uma sessão Niri/Hyprland) — apenas
-# desativa sua entrada de autostart por usuário, do jeito padrão do XDG:
-# um .desktop de mesmo nome em ~/.config/autostart com Hidden=true.
+# CORREÇÃO DE DIAGNÓSTICO (versão anterior deste arquivo estava errada):
+# afirmava-se aqui que o agente instalado nos essenciais (mate-polkit no
+# Fedora, polkit-gnome no Arch) era iniciado automaticamente por
+# /etc/xdg/autostart sob o Niri. Isso é FALSO no caso do Fedora: o
+# .desktop do mate-polkit tem "OnlyShowIn=MATE" (o do lxpolkit, "OnlyShowIn=
+# LXDE"), e com XDG_CURRENT_DESKTOP=niri o gerador XDG do systemd
+# corretamente NÃO os inicia — verificável com
+# 'systemctl --user list-units app-*@autostart.service'.
 #
-# A detecção usa "Exec=.*polkit" (case-insensitive, cobrindo também
-# "policykit") em vez de uma lista fixa de nomes de pacote — checado nos
-# .rpm reais do Fedora 44, o nome do pacote quase nunca aparece no Exec=:
-#   mate-polkit  -> arquivo polkit-mate-authentication-agent-1.desktop,
-#                   Exec=/usr/libexec/polkit-mate-authentication-agent-1
-#   lxpolkit     -> arquivo lxpolkit.desktop, Exec=lxpolkit
-# Uma lista de nomes de pacote (ex.: "mate-polkit") não bateria com nenhum
-# dos dois — o padrão genérico por "polkit"/"policykit" no Exec= cobre
-# esses casos e qualquer outro agente (polkit-gnome no Arch, KDE, XFCE,
-# LXQt) sem precisar manter uma lista.
-# ─────────────────────────────────────────────────────────────
+# A causa real de conflito observada foi um 'spawn-at-startup' de agente
+# polkit adicionado à mão na config do niri, e o 'exec_cmd' fixo que existia
+# no hyprland.lua (este último removido). Por isso:
+#   1. os essenciais não instalam mais agente polkit externo algum;
+#   2. verify_niri_environment() avisa se sobrar um spawn-at-startup desses;
+#   3. a função abaixo cobre o caso restante — um agente de terceiros cujo
+#      .desktop REALMENTE se aplique a esta sessão (sem OnlyShowIn, ou com
+#      OnlyShowIn incluindo o nosso compositor).
+# ═════════════════════════════════════════════════════════════
+
+# Este .desktop de autostart seria executado no compositor alvo?
+# Implementa as regras OnlyShowIn/NotShowIn da spec XDG Autostart.
+_autostart_applies_to_desktop() {
+    local file="$1"
+    local desktop="$2"
+    local only_show not_show
+
+    only_show=$(grep -m1 '^OnlyShowIn=' "$file" 2>/dev/null | cut -d= -f2- || true)
+    not_show=$(grep  -m1 '^NotShowIn='  "$file" 2>/dev/null | cut -d= -f2- || true)
+
+    if [ -n "$only_show" ]; then
+        printf '%s' "$only_show" | tr ';' '\n' | grep -qix "$desktop" || return 1
+    fi
+    if [ -n "$not_show" ]; then
+        printf '%s' "$not_show" | tr ';' '\n' | grep -qix "$desktop" && return 1
+    fi
+    return 0
+}
+
+# Nome do compositor como ele aparece em XDG_CURRENT_DESKTOP.
+_target_desktop_id() {
+    if [ "${COMPOSITOR_CHOICE:-niri}" = "hyprland" ]; then
+        echo "Hyprland"
+    else
+        echo "niri"
+    fi
+}
+
+# Desativa, só para este usuário, agentes polkit de terceiros que de fato
+# subiriam nesta sessão. Não desinstala nada: escreve um .desktop de mesmo
+# nome em ~/.config/autostart com Hidden=true (mecanismo padrão do XDG).
 disable_external_polkit_agent() {
     local user_home="$1"
     local autostart_dir="$user_home/.config/autostart"
     local system_autostart="/etc/xdg/autostart"
+    local desktop_id
+    desktop_id=$(_target_desktop_id)
 
     [ -d "$system_autostart" ] || return 0
 
@@ -247,17 +298,29 @@ disable_external_polkit_agent() {
     local desktop_file base
     for desktop_file in "$system_autostart"/*.desktop; do
         [ -f "$desktop_file" ] || continue
-        base=$(basename "$desktop_file")
-        if grep -qiE '^Exec=.*(polkit|policykit)' "$desktop_file" 2>/dev/null; then
-            mkdir -p "$autostart_dir"
-            {
-                echo "[Desktop Entry]"
-                echo "Hidden=true"
-                echo "X-Niri-Installer-Note=Desativado automaticamente: o Noctalia Shell ja usa o proprio agente polkit (polkit_agent=true). Apague este arquivo para reativar."
-            } > "$autostart_dir/$base"
-            log_info "  Agente polkit externo desativado no autostart: $base (Noctalia usa o próprio)"
-            disabled_any=1
+
+        # Detecta pelo Exec=, não por nome de pacote: nos .desktop reais do
+        # Fedora 44 o nome do pacote não aparece no Exec= (mate-polkit instala
+        # 'polkit-mate-authentication-agent-1.desktop' com
+        # Exec=/usr/libexec/polkit-mate-authentication-agent-1).
+        grep -qiE '^Exec=.*(polkit|policykit)' "$desktop_file" 2>/dev/null || continue
+
+        # Se o próprio .desktop já se exclui desta sessão, não há o que fazer:
+        # criar um override aqui só geraria arquivo inútil e a impressão falsa
+        # de que algo foi corrigido.
+        if ! _autostart_applies_to_desktop "$desktop_file" "$desktop_id"; then
+            continue
         fi
+
+        base=$(basename "$desktop_file")
+        mkdir -p "$autostart_dir"
+        {
+            echo "[Desktop Entry]"
+            echo "Hidden=true"
+            echo "X-Niri-Installer-Note=Desativado pelo instalador: o shell escolhido ja traz agente polkit proprio. Apague este arquivo para reativar."
+        } > "$autostart_dir/$base"
+        log_info "  Agente polkit externo desativado no autostart: $base"
+        disabled_any=1
     done
 
     if [ "$disabled_any" -eq 1 ]; then
@@ -265,13 +328,12 @@ disable_external_polkit_agent() {
         real_user=$(detect_user)
         chown -R "$real_user":"$real_user" "$autostart_dir" 2>/dev/null || true
     fi
+    return 0
 }
 
-# Reverte disable_external_polkit_agent(): remove só os overrides que NÓS
-# criamos (identificados pela marca X-Niri-Installer-Note), preservando
-# qualquer override manual do próprio usuário. Necessário para reinstalar
-# trocando de Noctalia para DMS sem deixar o usuário sem agente polkit algum
-# (DMS não teve o mesmo comportamento de agente embutido confirmado aqui).
+# Reverte disable_external_polkit_agent(): remove SÓ os overrides que este
+# instalador criou (marcados com X-Niri-Installer-Note), preservando qualquer
+# override manual do usuário.
 enable_external_polkit_agent() {
     local user_home="$1"
     local autostart_dir="$user_home/.config/autostart"
@@ -281,10 +343,73 @@ enable_external_polkit_agent() {
     for f in "$autostart_dir"/*.desktop; do
         [ -f "$f" ] || continue
         if grep -q "^X-Niri-Installer-Note=" "$f" 2>/dev/null; then
-            log_info "  Reativando agente polkit externo (shell DMS selecionado): $(basename "$f")"
+            log_info "  Removendo override de autostart criado pelo instalador: $(basename "$f")"
             rm -f "$f"
         fi
     done
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# Implantar a configuração base do Noctalia.
+#
+# O Noctalia 5.x guarda o estado em ~/.local/state/noctalia/ — NÃO em
+# ~/.config/noctalia (que fica vazio). Sem este passo, quem instalava pelo
+# script caía no assistente inicial com barra/tema padrão, enquanto uma
+# instalação manual "de verdade" já vinha ajustada: era a maior diferença
+# entre os dois caminhos.
+#
+# NUNCA sobrescreve um settings.toml existente — reinstalar é o fluxo de
+# atualização deste projeto e apagaria os ajustes feitos pela interface.
+# ─────────────────────────────────────────────────────────────
+deploy_noctalia_config() {
+    local repo_dir="$1"
+    local user_home="$2"
+    local src="$repo_dir/dotfiles/noctalia/settings.toml"
+    local state_dir="$user_home/.local/state/noctalia"
+    local dst="$state_dir/settings.toml"
+
+    [ -f "$src" ] || { log_warn "Config base do Noctalia não encontrada em $src"; return 0; }
+
+    if [ -e "$dst" ]; then
+        log_info "Config do Noctalia já existe ($dst) — preservada como está."
+        return 0
+    fi
+
+    log_info "Implantando configuração base do Noctalia em $dst..."
+    mkdir -p "$state_dir"
+    cp -a "$src" "$dst"
+
+    # Marca de "assistente inicial concluído": sem ela o Noctalia abre o
+    # setup-wizard por cima da config que acabamos de aplicar.
+    touch "$state_dir/.setup-complete"
+
+    local real_user
+    real_user=$(detect_user)
+    chown -R "$real_user":"$real_user" "$state_dir" 2>/dev/null || true
+    log_success "Configuração base do Noctalia aplicada."
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# Ajustes de shell que valem para QUALQUER compositor.
+#
+# Fica separado de apply_shell_config() (que é específico do Niri, pois mexe
+# em includes .kdl): com Hyprland o shell é sempre o Noctalia e estas mesmas
+# providências continuam necessárias.
+# ─────────────────────────────────────────────────────────────
+apply_shell_common() {
+    local repo_dir="$1"
+    local user_home
+    user_home=$(get_user_home)
+
+    if [ "${SHELL_CHOICE:-dms}" = "noctalia" ]; then
+        disable_external_polkit_agent "$user_home"
+        deploy_noctalia_config "$repo_dir" "$user_home"
+    else
+        enable_external_polkit_agent "$user_home"
+    fi
+    return 0
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -298,14 +423,6 @@ apply_shell_config() {
     local user_home
     user_home=$(get_user_home)
     local cfg_dir="$user_home/.config/niri/cfg"
-    local autostart="$cfg_dir/autostart.kdl"
-    local keybinds="$cfg_dir/keybinds.kdl"
-
-    if [ "$choice" = "noctalia" ]; then
-        disable_external_polkit_agent "$user_home"
-    else
-        enable_external_polkit_agent "$user_home"
-    fi
 
     if [ ! -d "$cfg_dir" ]; then
         log_warn "Diretório de config do Niri não encontrado ($cfg_dir) — pulando seleção de shell."
@@ -314,30 +431,35 @@ apply_shell_config() {
 
     # Escrever o include diretamente (em vez de 'sed' sobre o conteúdo antigo):
     # funciona independente do estado anterior dos arquivos — mesmo se uma
-    # execução passada tiver sido interrompida no meio e deixado o par
-    # autostart/keybinds apontando para o shell errado.
+    # execução passada tiver sido interrompida no meio e deixado os includes
+    # apontando para o shell errado.
     local suffix="dms"
     [ "$choice" = "noctalia" ] && suffix="noctalia"
 
-    log_info "Configurando o Niri para usar o shell: ${choice}..."
-    echo "include \"./autostart-${suffix}.kdl\"" > "$autostart"
-    echo "include \"./keybinds-${suffix}.kdl\""  > "$keybinds"
+    # Os três pares de include trocados por shell. 'shell-extra' foi acrescentado
+    # para que os fragmentos gerados pelo DMS (dms/*.kdl) deixem de ser
+    # carregados quando o shell escolhido é o Noctalia.
+    local switchable=(autostart keybinds shell-extra)
 
-    # Confirmar que os arquivos-alvo dos includes existem
-    local missing=0
-    for f in "$cfg_dir/autostart-${suffix}.kdl" "$cfg_dir/keybinds-${suffix}.kdl"; do
-        if [ ! -f "$f" ]; then
-            log_error "Arquivo de config do shell ausente: $f"
+    log_info "Configurando o Niri para usar o shell: ${choice}..."
+    local base missing=0
+    for base in "${switchable[@]}"; do
+        echo "include \"./${base}-${suffix}.kdl\"" > "$cfg_dir/${base}.kdl"
+        if [ ! -f "$cfg_dir/${base}-${suffix}.kdl" ]; then
+            log_error "Arquivo de config do shell ausente: $cfg_dir/${base}-${suffix}.kdl"
             missing=1
         fi
     done
+
     if [ "$missing" -eq 0 ]; then
-        log_success "Niri apontado para os configs do ${choice} (autostart + keybinds)."
+        log_success "Niri apontado para os configs do ${choice} (autostart + keybinds + fragmentos)."
     fi
 
     # Ajustar propriedade (caso rodando via sudo)
     local real_user
     real_user=$(detect_user)
-    chown "$real_user":"$real_user" "$autostart" "$keybinds" 2>/dev/null || true
+    for base in "${switchable[@]}"; do
+        chown "$real_user":"$real_user" "$cfg_dir/${base}.kdl" 2>/dev/null || true
+    done
     return 0
 }

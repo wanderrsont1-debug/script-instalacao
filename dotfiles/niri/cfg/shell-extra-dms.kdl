@@ -1,0 +1,18 @@
+// ────────── Fragmentos gerenciados pelo DankMaterialShell ──────────
+// Estes arquivos são escritos pelo próprio DMS em tempo de execução.
+// Só são incluídos quando o DMS é o shell escolhido.
+//
+// NOTA: 'dms/cursor.kdl' é gerado pelo DMS mas NÃO é incluído aqui (e por
+// isso não é mais versionado). Ele declarava um segundo bloco 'cursor',
+// duplicando o de cfg/misc.kdl — o niri aceita os dois e o último vencia em
+// silêncio, então o tamanho declarado em misc.kdl nunca valia. O cursor agora
+// tem uma fonte única: cfg/misc.kdl, válida para os dois shells.
+//
+// Pelo mesmo motivo não entram 'colors.kdl', 'layout.kdl', 'alttab.kdl' nem
+// 'wpblur.kdl': nenhum deles era incluído pelo config.kdl, ou seja, já eram
+// inertes. 'layout.kdl' ainda duplicava cfg/layout.kdl. O DMS regenera o que
+// precisar em tempo de execução.
+
+include "../dms/outputs.kdl"
+include "../dms/binds.kdl"
+include "../dms/windowrules.kdl"

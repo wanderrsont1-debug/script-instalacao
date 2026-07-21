@@ -7,9 +7,10 @@ include "./cfg/layout.kdl"
 include "./cfg/rules.kdl"
 include "./cfg/misc.kdl"
 
-include "dms/outputs.kdl"
-
-include "dms/cursor.kdl"
-include "dms/binds.kdl"
-
-include "dms/windowrules.kdl"
+// Fragmentos gerados/gerenciados pelo shell de desktop escolhido.
+// Igual a autostart.kdl e keybinds.kdl, este include é reescrito por
+// apply_shell_config() conforme SHELL_CHOICE (dms|noctalia).
+//
+// Antes os arquivos de dms/ eram incluídos aqui incondicionalmente: quem
+// escolhia o Noctalia carregava mesmo assim fragmentos gerados pelo DMS.
+include "./cfg/shell-extra.kdl"

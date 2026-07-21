@@ -68,7 +68,9 @@ pavucontrol
 # === Integração de sistema ===
 xdg-utils
 libsecret
-polkit-gnome
+# NOTA: 'polkit-gnome' foi removido de propósito. DMS e Noctalia trazem agente
+# polkit próprio; um segundo agente na mesma sessão disputa o nome no D-Bus e
+# gera "An authentication agent already exists for the given subject".
 gnome-keyring
 seahorse
 power-profiles-daemon
