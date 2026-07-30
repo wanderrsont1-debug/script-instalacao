@@ -35,3 +35,8 @@ fuse
 nodejs
 npm
 python3
+
+# === GitHub CLI ===
+# Veja a justificativa completa em packages/arch-devtools.txt.
+# No Fedora o pacote se chama 'gh' — no Arch, 'github-cli'.
+gh

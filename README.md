@@ -66,7 +66,7 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 | Multimídia | `mpv`, `ffmpeg`, `gst-plugins-*` |
 | Apps GUI | `nautilus`, `keepassxc`, `gnome-disk-utility`, `flatpak` |
 | Plataforma Qt (Wayland) | `qt5-wayland`, `qt6-wayland` — **obrigatórios**: sem eles apps Qt (KeePassXC é Qt5) não abrem numa sessão Wayland pura |
-| Empacotamento (opt-in) | `dpkg` (deb), `rpm-tools` (rpm), `libarchive`/bsdtar (pacman), `squashfs-tools` + `fuse2` (AppImage), `desktop-file-utils`, `patchelf`, `nodejs`, `npm`, `python` |
+| Empacotamento (opt-in) | `dpkg` (deb), `rpm-tools` (rpm), `libarchive`/bsdtar (pacman), `squashfs-tools` + `fuse2` (AppImage), `desktop-file-utils`, `patchelf`, `nodejs`, `npm`, `python`, `github-cli` |
 | Cursor | `bibata-cursor-theme-bin` (AUR, pré-compilado) → `bibata-cursor-theme` → tarball oficial. Variante padrão: **Bibata-Original-Amber** |
 | Vídeo / GPU | Detectado automaticamente: `mesa`, `vulkan-icd-loader`, `libva-utils` + `vulkan-radeon` (AMD) / `vulkan-intel`, `intel-media-driver` (Intel) + equivalentes `lib32-*` se o multilib estiver ativo. NVIDIA é **opt-in** (`nvidia-open-dkms`) |
 | Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |

@@ -44,3 +44,15 @@ nodejs
 npm
 # python é exigido pelo node-gyp ao compilar módulos nativos do Node
 python
+
+# === GitHub CLI ===
+# Resolve o 'git push' numa instalação limpa. Sem ele o único caminho é HTTPS
+# com token pessoal, que exige gerar o token no navegador, colar na mão e
+# renovar quando expira — e, se o terminal não tiver TTY, o git nem chega a
+# perguntar: falha com "could not read Username ... No such device or address".
+# Com 'gh auth login' a autenticação é feita pelo navegador e o git passa a
+# funcionar sozinho, sem token para guardar em disco.
+#
+# ATENÇÃO ao nome: no Arch o pacote é 'github-cli' (o binário é que se chama
+# 'gh'). Não existe pacote chamado 'gh' aqui — no Fedora, sim.
+github-cli
