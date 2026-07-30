@@ -158,6 +158,10 @@ main() {
         # reescreve os arquivos que acabaram de ser copiados.
         apply_cursor_theme || log_warn "Falha ao aplicar o tema de cursor."
 
+        # Modo escuro do sistema (GTK/Qt) — ver lib/dotfiles.sh:apply_dark_mode().
+        # Roda depois do cursor porque edita os MESMOS arquivos settings.ini.
+        apply_dark_mode || log_warn "Falha ao aplicar o modo escuro do sistema."
+
         # Apontar o Niri para o shell escolhido (DMS ou Noctalia).
         # Específico do Niri (troca de includes .kdl); o Hyprland usa um único
         # arquivo Lua já cabeado para o Noctalia, sem seleção de includes.

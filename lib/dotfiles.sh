@@ -247,6 +247,7 @@ apply_cursor_theme() {
     user_home=$(get_user_home)
     local theme="${CURSOR_THEME:-Bibata-Original-Amber}"
     local size="${CURSOR_SIZE:-28}"
+    local icons_dir="$user_home/.local/share/icons"
 
     log_info "Aplicando o tema de cursor '$theme' (tamanho $size) aos configs..."
 
@@ -333,7 +334,107 @@ apply_cursor_theme() {
         "$user_home/.config/gtk-3.0" "$user_home/.config/gtk-4.0" 2>/dev/null || true
     chown "$real_user":"$real_user" "$xres" 2>/dev/null || true
 
+    # Falha real: os configs foram todos apontados para $theme, mas o tema em
+    # si não existe em NENHUM diretório de ícones — nesse caso o cursor cai
+    # para o padrão do sistema até o pacote/tarball ser instalado (ver
+    # install_cursor_theme() em lib/packages.sh).
+    if [ ! -d "/usr/share/icons/$theme" ] && [ ! -d "$icons_dir/$theme" ]; then
+        log_warn "Tema de cursor '$theme' aplicado aos configs, mas NÃO está instalado em disco — o cursor pode aparecer como o padrão do sistema."
+        return 1
+    fi
+
     log_success "Tema de cursor '$theme' aplicado a todos os mecanismos."
+    return 0
+}
+
+# ═════════════════════════════════════════════════════════════
+# MODO ESCURO — GTK3, GTK4/libadwaita e Qt — FONTE ÚNICA em $COLOR_SCHEME
+# (lib/utils.sh; padrão "prefer-dark").
+#
+# Dois mecanismos, porque GTK3 e GTK4/libadwaita já divergem entre si:
+#   • GTK3 (settings.ini)  → gtk-application-prefer-dark-theme
+#     Continua necessário porque apps GTK3 mais antigos não leem o esquema
+#     abaixo; reescreve o MESMO settings.ini que apply_cursor_theme() já
+#     cria/edita, então roda depois dele nesta ordem.
+#   • GTK4/libadwaita + Qt → org.gnome.desktop.interface color-scheme (dconf)
+#     Nautilus (GTK4/libadwaita) ignora completamente settings.ini e só olha
+#     esta chave. Apps Qt modernos (ex.: KeePassXC ≥ 2.7) também a seguem,
+#     através do xdg-desktop-portal (org.freedesktop.appearance), que por
+#     sua vez lê esta mesma chave no backend GTK/GNOME do portal — cobrindo
+#     GTK4 e Qt com uma única chamada, sem precisar instalar qt5ct/qt6ct.
+#
+# gsettings/dconf não exigem uma sessão D-Bus gráfica ativa para GRAVAR o
+# valor (só para notificar apps já abertos) — funciona normalmente rodando
+# direto do TTY, desde que 'dconf' e 'gsettings-desktop-schemas' estejam
+# instalados (o schema 'org.gnome.desktop.interface' vem deles, não do GTK).
+# ═════════════════════════════════════════════════════════════
+apply_dark_mode() {
+    local scheme="${COLOR_SCHEME:-prefer-dark}"
+    local prefer_dark=0
+    [ "$scheme" = "prefer-dark" ] && prefer_dark=1
+    # Falha real: o mecanismo que cobre GTK4/libadwaita + Qt (via portal) não
+    # pôde ser aplicado. O GTK3 (settings.ini, abaixo) é best-effort e quase
+    # nunca falha sozinho, então não entra nesta checagem.
+    local gsettings_ok=false
+
+    log_info "Aplicando esquema de cores do sistema (GTK/Qt): $scheme..."
+
+    # 'gsettings list-schemas' e não só 'command -v gsettings': o binário vem
+    # do glib2 (quase sempre já presente como dependência), mas o SCHEMA
+    # 'org.gnome.desktop.interface' vem do pacote gsettings-desktop-schemas —
+    # sem ele 'gsettings set' falha com "No such schema", mesmo com GTK
+    # instalado.
+    if ! command -v gsettings &>/dev/null \
+        || ! gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.desktop.interface'; then
+        log_info "  Instalando dconf + gsettings-desktop-schemas (necessários para o esquema de cores)..."
+        sudo pacman -S --needed --noconfirm dconf gsettings-desktop-schemas \
+            || log_warn "  Falha ao instalar dconf/gsettings-desktop-schemas — GTK4/libadwaita e Qt podem continuar no tema claro."
+    fi
+
+    if command -v gsettings &>/dev/null; then
+        if gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null; then
+            log_success "  org.gnome.desktop.interface color-scheme = $scheme (GTK4/libadwaita + Qt via portal)"
+            gsettings_ok=true
+        else
+            log_warn "  Falha ao definir color-scheme via gsettings (schema ainda ausente?)."
+        fi
+    else
+        log_warn "  gsettings indisponível — GTK4/libadwaita e Qt (via portal) continuarão no tema padrão."
+    fi
+
+    # ── GTK3 (settings.ini) ──────────────────────────────────
+    # Mesmos dois arquivos que apply_cursor_theme() já cria — reescreve só a
+    # chave de tema escuro, preservando o que já estiver lá (cursor, etc.).
+    local user_home gtk_ver gtk_ini
+    user_home=$(get_user_home)
+    for gtk_ver in gtk-3.0 gtk-4.0; do
+        gtk_ini="$user_home/.config/$gtk_ver/settings.ini"
+        mkdir -p "$(dirname "$gtk_ini")"
+        if [ ! -f "$gtk_ini" ]; then
+            printf '[Settings]\ngtk-application-prefer-dark-theme=%s\n' "$prefer_dark" > "$gtk_ini"
+        else
+            grep -q '^\[Settings\]' "$gtk_ini" || sed -i '1i [Settings]' "$gtk_ini"
+            if grep -q '^gtk-application-prefer-dark-theme=' "$gtk_ini"; then
+                sed -i -E "s|^gtk-application-prefer-dark-theme=.*|gtk-application-prefer-dark-theme=${prefer_dark}|" "$gtk_ini"
+            else
+                sed -i "/^\[Settings\]/a gtk-application-prefer-dark-theme=${prefer_dark}" "$gtk_ini"
+            fi
+        fi
+        log_success "  $gtk_ver/settings.ini (gtk-application-prefer-dark-theme=${prefer_dark})"
+    done
+
+    # Propriedade correta caso o instalador tenha sido chamado via sudo.
+    local real_user
+    real_user=$(detect_user)
+    chown -R "$real_user":"$real_user" \
+        "$user_home/.config/gtk-3.0" "$user_home/.config/gtk-4.0" 2>/dev/null || true
+
+    if ! $gsettings_ok; then
+        log_warn "Esquema de cores aplicado parcialmente — GTK3 foi ajustado, mas GTK4/libadwaita e Qt (via portal) podem continuar no tema padrão."
+        return 1
+    fi
+
+    log_success "Esquema de cores '$scheme' aplicado a GTK/Qt."
     return 0
 }
 
@@ -575,5 +676,7 @@ apply_shell_config() {
     for base in "${switchable[@]}"; do
         chown "$real_user":"$real_user" "$cfg_dir/${base}.kdl" 2>/dev/null || true
     done
+
+    [ "$missing" -eq 0 ] || return 1
     return 0
 }

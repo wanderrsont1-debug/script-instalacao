@@ -28,6 +28,17 @@ NC='\033[0m' # No Color
 CURSOR_THEME="${CURSOR_THEME:-Bibata-Modern-Amber}"
 CURSOR_SIZE="${CURSOR_SIZE:-28}"
 
+# ─────────────────────────────────────────────────────────────
+# Esquema de cores do sistema (GTK/Qt) — FONTE ÚNICA da verdade
+#
+# Usado por apply_dark_mode() (lib/dotfiles.sh) para decidir o valor de
+# 'org.gnome.desktop.interface color-scheme' e de
+# 'gtk-application-prefer-dark-theme'. Valores aceitos pelo esquema GNOME:
+# "prefer-dark", "prefer-light" ou "default".
+# Para instalar em modo claro sem editar o script:
+#   COLOR_SCHEME=default ./install.sh
+COLOR_SCHEME="${COLOR_SCHEME:-prefer-dark}"
+
 # Funções de logging
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
