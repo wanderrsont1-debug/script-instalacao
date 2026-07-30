@@ -557,6 +557,11 @@ install_fedora_packages() {
             pipewire-pulseaudio
             pipewire-alsa
             pavucontrol
+            # Plugins de plataforma Qt para Wayland — veja a explicação longa em
+            # packages/arch-base.txt. Sem eles, apps Qt (KeePassXC à frente)
+            # não conseguem abrir janela numa sessão Wayland pura.
+            qt5-qtwayland
+            qt6-qtwayland
             xdg-utils
             libsecret
             xdg-desktop-portal
@@ -665,8 +670,249 @@ install_fedora_packages() {
         install_package_list "$pkg_dir/fedora-libs.txt" "Bibliotecas e utilitários essenciais"
     fi
 
+    # Ferramentas de empacotamento (AppImage / deb / rpm / pacman) — opt-in,
+    # em paridade com o fluxo do Arch.
+    if prompt_yes_no "Deseja instalar as ferramentas para empacotar programas (AppImage, deb, rpm, pacman)?" "S"; then
+        install_package_list "$pkg_dir/fedora-devtools.txt" "Ferramentas de empacotamento"
+    fi
+
     # Apps opcionais — menu de seleção múltipla.
     install_optional_apps_fedora "$pkg_dir/fedora-optional.txt"
+}
+
+# ═════════════════════════════════════════════════════════════
+# ARCH — Repositório [multilib] (bibliotecas 32-bit)
+#
+# Sem ele, 'steam' e qualquer 'lib32-*' simplesmente NÃO EXISTEM para o pacman.
+# E isso não produzia um erro claro: pkg_available() falhava, install_entry()
+# concluía "não é nativo, então é AUR" e mandava o helper compilar um 'steam'
+# que não existe no AUR — o usuário via uma pilha de erros de build sem nenhuma
+# relação com a causa real. O comentário em packages/arch-optional.txt avisava
+# do requisito, mas o script não fazia nada a respeito.
+# ═════════════════════════════════════════════════════════════
+multilib_enabled() {
+    grep -qE '^[[:space:]]*\[multilib\]' /etc/pacman.conf 2>/dev/null
+}
+
+enable_multilib_arch() {
+    [ "${DISTRO:-arch}" = "fedora" ] && return 0
+
+    if multilib_enabled; then
+        log_info "Repositório [multilib] já habilitado."
+        return 0
+    fi
+
+    if ! grep -qE '^[[:space:]]*#[[:space:]]*\[multilib\]' /etc/pacman.conf 2>/dev/null; then
+        log_warn "Seção [multilib] não encontrada em /etc/pacman.conf — habilite-a manualmente."
+        return 1
+    fi
+
+    log_info "Habilitando o repositório [multilib] em /etc/pacman.conf..."
+    sudo cp -a /etc/pacman.conf "/etc/pacman.conf.bak-$(date +%Y%m%d_%H%M%S)"
+
+    # awk, e não o 'sed -i "/\[multilib\]/,+1 s/^#//"' que circula pela internet:
+    # aquele descomenta a linha SEGUINTE seja ela qual for e, num pacman.conf
+    # editado à mão, a linha seguinte costuma ser um comentário explicativo —
+    # que viraria diretiva inválida e quebraria o pacman inteiro. Aqui só o
+    # cabeçalho [multilib] e o primeiro 'Include' DELE são alterados.
+    local tmp
+    tmp=$(mktemp)
+    awk '
+        /^[[:space:]]*#[[:space:]]*\[multilib\][[:space:]]*$/ && !seen {
+            print "[multilib]"; in_ml = 1; seen = 1; next
+        }
+        # Chegou noutra seção sem ter achado o Include — parar de procurar.
+        in_ml && /^[[:space:]]*#?[[:space:]]*\[/ { in_ml = 0 }
+        in_ml && /^[[:space:]]*#[[:space:]]*Include[[:space:]]*=/ {
+            sub(/^[[:space:]]*#[[:space:]]*/, ""); print; in_ml = 0; next
+        }
+        { print }
+    ' /etc/pacman.conf > "$tmp"
+
+    if ! grep -qE '^[[:space:]]*\[multilib\]' "$tmp" \
+        || ! grep -qE '^[[:space:]]*Include' "$tmp"; then
+        log_warn "Não foi possível habilitar o [multilib] automaticamente — pacman.conf inalterado."
+        rm -f "$tmp"
+        return 1
+    fi
+
+    sudo install -m 644 -o root -g root "$tmp" /etc/pacman.conf
+    rm -f "$tmp"
+
+    log_info "Sincronizando a base de dados com o [multilib]..."
+    sudo pacman -Syu --noconfirm || log_warn "Falha ao sincronizar após habilitar o [multilib]."
+    log_success "Repositório [multilib] habilitado."
+    return 0
+}
+
+# ═════════════════════════════════════════════════════════════
+# ARCH — Drivers de vídeo e aceleração por hardware
+#
+# O lado Fedora já detectava a GPU e instalava os drivers VA-API
+# (setup_fedora_codecs); o lado Arch não instalava driver NENHUM. O único
+# pacote relacionado nas listas era 'vulkan-icd-loader' (arch-libs.txt), que é
+# só o CARREGADOR: sem um ICD (vulkan-radeon / vulkan-intel / nvidia-utils) ele
+# não tem o que carregar. Numa instalação realmente limpa isso significava
+# Vulkan indisponível e decodificação de vídeo por hardware inativa — num
+# ambiente cuja premissa inteira é um compositor Wayland acelerado.
+# ═════════════════════════════════════════════════════════════
+
+# Retorna um texto com os fornecedores de GPU encontrados (amd/intel/nvidia).
+detect_gpu_vendors() {
+    local out=""
+
+    if command -v lspci &>/dev/null; then
+        out=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' || true)
+    fi
+
+    # Sem lspci não dá para desistir: 'pciutils' é opt-in (arch-libs.txt) e numa
+    # instalação mínima ainda não está presente justamente quando esta função
+    # roda. Fallback: ler os IDs de fornecedor direto do sysfs (classe 0x03 =
+    # display controller), que existe em qualquer kernel.
+    if [ -z "$out" ]; then
+        local dev class vendor
+        for dev in /sys/bus/pci/devices/*; do
+            [ -r "$dev/class" ] || continue
+            class=$(cat "$dev/class" 2>/dev/null || echo "")
+            [[ "$class" == 0x03* ]] || continue
+            vendor=$(cat "$dev/vendor" 2>/dev/null || echo "")
+            case "$vendor" in
+                0x1002|0x1022) out+=" amd" ;;
+                0x8086)        out+=" intel" ;;
+                0x10de)        out+=" nvidia" ;;
+            esac
+        done
+    fi
+
+    printf '%s' "$out"
+}
+
+# Dos nomes pedidos, quais existem de fato nos repositórios desta distro?
+#
+# Filtrar é obrigatório e não cosmético: nomes de pacote de driver mudam com o
+# tempo (por exemplo 'libva-mesa-driver' e 'mesa-vdpau' foram absorvidos pelo
+# próprio 'mesa'). Passar um nome extinto direto ao pacman faz ele abortar a
+# transação INTEIRA com "target not found", levando junto os drivers que
+# realmente existem — a mesma classe de falha em lote já tratada em
+# install_package_list().
+_filter_available_pkgs() {
+    local p
+    for p in "$@"; do
+        if pacman -Si "$p" &>/dev/null; then
+            printf '%s\n' "$p"
+        else
+            log_info "  (ignorando '$p' — não existe nos repositórios desta distro)" >&2
+        fi
+    done
+}
+
+install_gpu_drivers_arch() {
+    [ "${DISTRO:-arch}" = "fedora" ] && return 0
+
+    local gpu_info
+    gpu_info=$(detect_gpu_vendors)
+
+    if [ -z "$gpu_info" ]; then
+        log_warn "Nenhuma GPU detectada — drivers de vídeo não serão instalados."
+        return 0
+    fi
+
+    local is_amd=false is_intel=false is_nvidia=false
+    grep -qiE 'amd|ati|radeon' <<< "$gpu_info" && is_amd=true
+    grep -qi  'intel'          <<< "$gpu_info" && is_intel=true
+    grep -qi  'nvidia'         <<< "$gpu_info" && is_nvidia=true
+
+    local pkgs=(mesa vulkan-icd-loader libva-utils)
+    if $is_amd; then
+        log_info "  GPU AMD/ATI detectada."
+        pkgs+=(vulkan-radeon libva-mesa-driver mesa-vdpau)
+    fi
+    if $is_intel; then
+        log_info "  GPU Intel detectada."
+        pkgs+=(vulkan-intel intel-media-driver libva-intel-driver)
+    fi
+
+    local available=()
+    mapfile -t available < <(_filter_available_pkgs "${pkgs[@]}")
+
+    if [ ${#available[@]} -gt 0 ]; then
+        log_info "Instalando drivers de vídeo: ${available[*]}"
+        sudo pacman -S --needed --noconfirm "${available[@]}" \
+            || log_warn "Falha ao instalar parte dos drivers de vídeo."
+    fi
+
+    # Equivalentes 32-bit — sem eles, Steam e Wine caem para renderização por
+    # software mesmo com o driver 64-bit correto instalado.
+    if multilib_enabled; then
+        local lib32=(lib32-mesa)
+        $is_amd   && lib32+=(lib32-vulkan-radeon)
+        $is_intel && lib32+=(lib32-vulkan-intel)
+
+        local lib32_ok=()
+        mapfile -t lib32_ok < <(_filter_available_pkgs "${lib32[@]}")
+        if [ ${#lib32_ok[@]} -gt 0 ]; then
+            log_info "Instalando drivers 32-bit (multilib): ${lib32_ok[*]}"
+            sudo pacman -S --needed --noconfirm "${lib32_ok[@]}" \
+                || log_warn "Falha ao instalar os drivers 32-bit."
+        fi
+    fi
+
+    if $is_nvidia; then
+        install_nvidia_driver_arch
+    fi
+
+    log_success "Drivers de vídeo configurados."
+    return 0
+}
+
+# NVIDIA fica FORA do caminho automático de propósito: a escolha entre
+# nvidia-open-dkms / nvidia-dkms / nvidia (e o -headers do kernel certo) depende
+# do modelo da placa e do kernel instalado, e o pacote errado deixa a máquina
+# sem vídeo no próximo boot — exatamente o oposto do que este instalador existe
+# para garantir. Por isso é opt-in explícito, com padrão "não".
+install_nvidia_driver_arch() {
+    log_warn "GPU NVIDIA detectada — o driver proprietário NÃO é instalado automaticamente."
+    log_info "  Placas GTX 900 ou mais novas: 'nvidia-open-dkms'."
+    log_info "  Placas mais antigas (Kepler/Maxwell 1ª geração): 'nvidia-dkms'."
+
+    if ! prompt_yes_no "Deseja instalar agora o driver aberto da NVIDIA (nvidia-open-dkms)?" "N"; then
+        log_info "Driver NVIDIA ignorado. Instale depois com: sudo pacman -S nvidia-open-dkms nvidia-utils"
+        return 0
+    fi
+
+    # O DKMS precisa dos headers do kernel EM USO. Descobrir o pacote do kernel
+    # pelo dono do vmlinuz do kernel corrente cobre linux, linux-lts, linux-zen
+    # e os kernels do CachyOS sem manter uma lista fixa que envelheceria.
+    local kernel_pkg headers_pkg
+    kernel_pkg=$(pacman -Qqo "/usr/lib/modules/$(uname -r)/vmlinuz" 2>/dev/null | head -n1 || true)
+    headers_pkg="${kernel_pkg:+${kernel_pkg}-headers}"
+    [ -z "$headers_pkg" ] && headers_pkg="linux-headers"
+
+    local nvidia_pkgs=("$headers_pkg" nvidia-open-dkms nvidia-utils egl-wayland libva-nvidia-driver)
+    local available=()
+    mapfile -t available < <(_filter_available_pkgs "${nvidia_pkgs[@]}")
+
+    if [ ${#available[@]} -eq 0 ]; then
+        log_warn "Nenhum pacote NVIDIA disponível nos repositórios — pulando."
+        return 1
+    fi
+
+    log_info "Instalando: ${available[*]}"
+    if sudo pacman -S --needed --noconfirm "${available[@]}"; then
+        log_success "Driver NVIDIA instalado."
+        # Wayland em NVIDIA exige o modeset do DRM. Versões recentes do
+        # nvidia-utils já o ativam por padrão, mas verificar é barato e a falha
+        # (sessão Wayland que não inicia) é cara de diagnosticar depois.
+        if ! grep -rqs 'nvidia_drm.modeset=1\|options nvidia_drm modeset=1' /etc/modprobe.d /etc/default/grub /etc/kernel 2>/dev/null; then
+            log_warn "  Se a sessão Wayland não iniciar, ative o modeset do DRM:"
+            log_info  "    echo 'options nvidia_drm modeset=1' | sudo tee /etc/modprobe.d/nvidia.conf"
+            log_info  "    sudo mkinitcpio -P   # (ou o gerador de initramfs da sua distro)"
+        fi
+        return 0
+    fi
+
+    log_warn "Falha ao instalar o driver NVIDIA — o sistema seguirá com o driver 'nouveau'."
+    return 1
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -687,10 +933,13 @@ setup_arch_repos() {
             tar -xf "$temp_dir/cachyos-repo.tar.xz" -C "$temp_dir"
             (
                 cd "$temp_dir/cachyos-repo"
-                sudo ./cachyos-repo.sh || echo "Falha ao executar script do CachyOS."
+                sudo ./cachyos-repo.sh || log_warn "Falha ao executar o script do CachyOS."
             )
             rm -rf "$temp_dir"
-            sudo pacman -Syu --noconfirm
+            # '|| log_warn': sem a guarda, uma falha aqui dispara o 'set -e' e
+            # aborta install_arch_packages() ANTES do SDDM — o cenário que o
+            # resto deste arquivo trabalha para evitar.
+            sudo pacman -Syu --noconfirm || log_warn "Falha ao atualizar após adicionar os repositórios do CachyOS."
         else
             log_error "Falha ao baixar script do repositório CachyOS."
             rm -rf "$temp_dir"
@@ -712,15 +961,32 @@ install_arch_packages() {
         optimize_mirrors_arch
     fi
 
-    setup_arch_repos
-
-    log_success "Gerenciador de pacotes: pacman | AUR helper: ${AUR_HELPER:-none}"
-
     # IMPORTANTE: usar -Syu (nunca apenas -Sy). Um 'pacman -Sy' seguido de instalação
     # é um "partial upgrade" e pode quebrar o sistema (libs novas contra sistema antigo),
     # especialmente em instalações recém-feitas/mínimas.
+    #
+    # O chaveiro é atualizado IMEDIATAMENTE antes deste -Syu, e não em outro
+    # ponto do script: refresh_arch_keyring() usa '-Sy' (única exceção à regra
+    # acima), então qualquer coisa instalada entre as duas chamadas seria um
+    # partial upgrade. Manter as duas linhas coladas é o que torna isso seguro.
     log_info "Sincronizando a base de dados e atualizando o sistema (evita partial upgrade)..."
-    sudo pacman -Syu --noconfirm
+    if declare -f refresh_arch_keyring &>/dev/null; then
+        refresh_arch_keyring || log_warn "Seguindo com o chaveiro atual."
+    fi
+    if ! sudo pacman -Syu --noconfirm; then
+        log_warn "O 'pacman -Syu' falhou na primeira tentativa."
+        log_info  "  Causa mais comum: chaveiro/assinaturas. Reconstruindo e tentando de novo..."
+        sudo pacman-key --init     &>/dev/null || true
+        sudo pacman-key --populate &>/dev/null || true
+        sudo pacman -Syu --noconfirm \
+            || log_warn "Atualização do sistema falhou — a instalação segue, mas pacotes podem faltar."
+    fi
+
+    # Só DEPOIS de o sistema estar atualizado e com chaveiro válido vale a pena
+    # adicionar repositório de terceiros: o script do CachyOS instala pacotes.
+    setup_arch_repos
+
+    log_success "Gerenciador de pacotes: pacman | AUR helper: ${AUR_HELPER:-none}"
 
     if prompt_yes_no "Deseja instalar os pacotes essenciais do ambiente no Arch Linux?" "S"; then
         # 1. Pacotes base comuns do ambiente (independentes do compositor)
@@ -739,6 +1005,15 @@ install_arch_packages() {
         # chegaria a ser instalado. Com o SDDM primeiro, o sistema já entra
         # em modo gráfico no próximo boot mesmo que o shell falhe depois.
         install_package_list "$pkg_dir/arch-sddm.txt" "SDDM e dependências Qt"
+    fi
+
+    # 2b. Drivers de vídeo — antes de fontes/navegadores/opcionais de propósito:
+    # sem driver DRM/Mesa funcional o compositor Wayland não sobe, e todo o
+    # resto do ambiente fica irrelevante. Fora do 'if' dos essenciais pelo mesmo
+    # motivo de install_shell_packages(): numa reinstalação o usuário responde
+    # "não" aos essenciais e ficaria sem esta etapa.
+    if prompt_yes_no "Deseja detectar a GPU e instalar os drivers de vídeo/aceleração?" "S"; then
+        install_gpu_drivers_arch || log_warn "Drivers de vídeo podem não ter sido instalados."
     fi
 
     # 3. Desktop Shell escolhido (DMS ou Noctalia beta) — FORA do 'if' acima.
@@ -770,7 +1045,13 @@ install_arch_packages() {
         install_package_list "$pkg_dir/arch-libs.txt" "Bibliotecas e utilitários essenciais"
     fi
 
-    # 7. Apps opcionais — apresentar menu de escolha
+    # 7. Ferramentas de empacotamento (AppImage / deb / rpm / pacman).
+    # Opt-in: só faz sentido para quem BUILDA programas nesta máquina.
+    if prompt_yes_no "Deseja instalar as ferramentas para empacotar programas (AppImage, deb, rpm, pacman)?" "S"; then
+        install_package_list "$pkg_dir/arch-devtools.txt" "Ferramentas de empacotamento"
+    fi
+
+    # 8. Apps opcionais — apresentar menu de escolha
     install_optional_apps_arch "$pkg_dir/arch-optional.txt"
 }
 
@@ -863,6 +1144,23 @@ select_and_install_menu() {
         return 0
     fi
 
+    # Alguns itens SÓ existem no repositório [multilib] (32-bit). Habilitar sob
+    # demanda, em vez de perguntar antes: quem nunca escolhe Steam/Wine não
+    # ganha um prompt a mais, e quem escolhe não recebe o erro confuso de
+    # "compilar steam do AUR" descrito em enable_multilib_arch().
+    if [ "${DISTRO:-arch}" != "fedora" ] && ! multilib_enabled; then
+        local needs_multilib=false
+        for app in "${selected[@]}"; do
+            case "$app" in
+                steam|lib32-*|wine|wine-*|winetricks|lutris|bottles) needs_multilib=true ;;
+            esac
+        done
+        if $needs_multilib; then
+            log_info "Item selecionado requer bibliotecas 32-bit — habilitando o [multilib]..."
+            enable_multilib_arch || log_warn "  Sem o [multilib], esse item não poderá ser instalado."
+        fi
+    fi
+
     # A instalação de cada item é delegada a install_entry(), que resolve o
     # prefixo (nativo / flatpak: / copr: / curl:) conforme a distro. É o que
     # permite este mesmo menu servir Arch e Fedora sem duplicar código.
@@ -906,19 +1204,27 @@ install_browsers_fedora() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# UTILITÁRIO: Instalar o tema de cursor Bibata-Modern-Ice
+# UTILITÁRIO: Instalar o tema de cursor (padrão: Bibata-Original-Amber)
 #
-# A config do Niri (cfg/misc.kdl) declara este tema. Ele NÃO existe nos
-# repositórios do Fedora (nem como RPM, nem em COPR mantido), e antes o
-# instalador não o instalava de forma alguma: o niri caía no cursor padrão
-# em silêncio, e a config apontava ainda por cima para uma variante
-# ("Bibata-Modern-Amber") que não existia em lugar nenhum.
+# O nome do tema vem de $CURSOR_THEME (lib/utils.sh) — não escreva o nome
+# à mão aqui, veja lá o histórico de divergência entre os configs.
 #
-# No Arch existe no AUR; nas demais distros usamos o tarball oficial do
-# projeto, mesmo padrão já usado por install_meslo_font().
+# Origens, em ordem de preferência:
+#   1. AUR 'bibata-cursor-theme-bin' — recomendado pelo próprio projeto: são
+#      cursores pré-compilados, então instala em segundos. O 'bibata-cursor-
+#      theme' (sem -bin) renderiza os SVGs na hora, o que leva MUITOS minutos
+#      e puxa toolchain de build — péssimo dentro de um instalador.
+#   2. AUR 'bibata-cursor-theme' — fallback se o -bin não estiver disponível.
+#   3. Tarball do release oficial no GitHub (ful1e5/Bibata_Cursor), para
+#      Fedora e para quem não tem AUR helper. Mesmo padrão de
+#      install_meslo_font().
+#
+# Os pacotes do AUR instalam TODAS as variantes de uma vez em
+# /usr/share/icons (Modern/Original × Amber/Classic/Ice, + as '-Right');
+# o tarball traz só a variante pedida, para ~/.local/share/icons.
 # ─────────────────────────────────────────────────────────────
 install_cursor_theme() {
-    local theme="Bibata-Modern-Ice"
+    local theme="${CURSOR_THEME:-Bibata-Original-Amber}"
     local icons_dir
     icons_dir="$(get_user_home)/.local/share/icons"
 
@@ -929,12 +1235,22 @@ install_cursor_theme() {
 
     # Arch: preferir o pacote (recebe atualização junto com o sistema).
     if [ "${DISTRO:-arch}" != "fedora" ] && [ "${AUR_HELPER:-none}" != "none" ]; then
-        log_info "Instalando o tema de cursor $theme via AUR..."
-        if "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) bibata-cursor-theme; then
-            log_success "Tema de cursor instalado via AUR."
-            return 0
-        fi
-        log_warn "  Falha via AUR — tentando o tarball oficial."
+        local aur_pkg
+        for aur_pkg in bibata-cursor-theme-bin bibata-cursor-theme; do
+            log_info "Instalando o tema de cursor $theme via AUR ($aur_pkg)..."
+            if "$AUR_HELPER" -S --needed --noconfirm $(aur_noninteractive_flags) "$aur_pkg"; then
+                # Confirmar que a VARIANTE pedida veio junto: os pacotes trazem
+                # o conjunto completo, mas se um dia isso mudar, é melhor cair
+                # para o tarball do que declarar sucesso e ficar sem o tema.
+                if [ -d "/usr/share/icons/$theme" ]; then
+                    log_success "Tema de cursor $theme instalado via AUR ($aur_pkg)."
+                    return 0
+                fi
+                log_warn "  '$aur_pkg' instalado, mas a variante $theme não apareceu em /usr/share/icons."
+            fi
+            log_warn "  Falha com '$aur_pkg'."
+        done
+        log_warn "  Nenhum pacote AUR funcionou — tentando o tarball oficial."
     fi
 
     log_info "Instalando o tema de cursor $theme (release oficial)..."

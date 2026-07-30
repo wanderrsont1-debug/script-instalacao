@@ -45,6 +45,116 @@ check_distro() {
     return 0
 }
 
+# ─────────────────────────────────────────────────────────────
+# Relógio do sistema
+#
+# Data/hora errada é uma das causas mais frequentes — e mais mal
+# diagnosticadas — de falha logo no início de uma instalação limpa: o pacman e
+# o dnf recusam assinaturas válidas com mensagens que apontam para o pacote
+# ("invalid or corrupted package", "signature is from the future"), nunca para
+# o relógio. Em máquina recém-instalada, dual boot com Windows ou bateria de
+# CMOS fraca isso acontece o tempo todo.
+#
+# Não é fatal: só avisa e tenta ligar a sincronização automática.
+# ─────────────────────────────────────────────────────────────
+check_system_clock() {
+    if ! command -v timedatectl &>/dev/null; then
+        return 0
+    fi
+
+    local synced
+    synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "")
+
+    if [ "$synced" = "yes" ]; then
+        log_success "Relógio sincronizado por NTP: OK"
+        return 0
+    fi
+
+    log_warn "O relógio do sistema NÃO está sincronizado por NTP."
+    log_info "  Hora atual do sistema: $(date '+%d/%m/%Y %H:%M %Z')"
+    log_info "  Ativando a sincronização automática (timedatectl set-ntp true)..."
+    sudo timedatectl set-ntp true &>/dev/null || true
+
+    # A sincronização não é instantânea — dar alguns segundos antes de desistir.
+    local i
+    for i in $(seq 1 10); do
+        sleep 1
+        synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "")
+        [ "$synced" = "yes" ] && break
+    done
+
+    if [ "$synced" = "yes" ]; then
+        log_success "Relógio sincronizado: $(date '+%d/%m/%Y %H:%M %Z')"
+    else
+        log_warn "Não foi possível sincronizar o relógio automaticamente."
+        log_info "  Se a hora acima estiver errada, corrija ANTES de continuar — senão a"
+        log_info "  instalação vai falhar com erros de assinatura sem relação aparente:"
+        log_info "    sudo timedatectl set-time \"AAAA-MM-DD HH:MM:SS\""
+    fi
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# Chaveiro (keyring) do pacman — Arch e derivadas
+#
+# Numa ISO antiga ou numa instalação mínima parada há meses, as chaves de
+# assinatura dos repositórios já expiraram. O primeiro 'pacman -Syu' então
+# falha inteiro — e, como install_arch_packages() é chamado com '|| log_warn'
+# (de propósito, para nunca abortar antes do SDDM), a instalação SEGUIA e
+# falhava em absolutamente tudo depois, sem que a causa raiz aparecesse.
+# ─────────────────────────────────────────────────────────────
+
+# Quais chaveiros esta instalação usa? Em derivadas (CachyOS, EndeavourOS,
+# Manjaro) o chaveiro próprio é tão essencial quanto o do Arch: atualizar só o
+# 'archlinux-keyring' deixaria os pacotes do repo da distro ainda recusados.
+arch_keyring_packages() {
+    local candidates=(archlinux-keyring cachyos-keyring endeavouros-keyring manjaro-keyring)
+    local found=()
+    local k
+    for k in "${candidates[@]}"; do
+        pacman -Q "$k" &>/dev/null && found+=("$k")
+    done
+    # Instalação sem nenhum chaveiro registrado: o do Arch é o mínimo viável.
+    [ ${#found[@]} -eq 0 ] && found=(archlinux-keyring)
+    printf '%s\n' "${found[@]}"
+}
+
+# Atualiza o chaveiro e, se preciso, o reconstrói localmente.
+#
+# ATENÇÃO ao chamar: esta função usa '-Sy' (sem 'u'), que normalmente é
+# proibido neste projeto por causar partial upgrade. Atualizar o chaveiro é a
+# exceção documentada pelo próprio Arch — ele precisa vir ANTES do '-Syu',
+# senão o upgrade inteiro é recusado na verificação de assinatura. Por isso
+# o chamador é OBRIGADO a executar um '-Syu' logo em seguida, sem instalar
+# mais nada no meio, para não deixar janela de partial upgrade.
+refresh_arch_keyring() {
+    [ "${DISTRO:-arch}" = "fedora" ] && return 0
+
+    local keyrings=()
+    mapfile -t keyrings < <(arch_keyring_packages)
+
+    log_info "Atualizando o chaveiro do pacman (${keyrings[*]})..."
+    if sudo pacman -Sy --needed --noconfirm "${keyrings[@]}"; then
+        log_success "Chaveiro do pacman atualizado."
+        return 0
+    fi
+
+    log_warn "Falha ao atualizar o chaveiro — reconstruindo-o localmente."
+    sudo pacman-key --init    &>/dev/null || true
+    sudo pacman-key --populate &>/dev/null || true
+
+    if sudo pacman -Sy --needed --noconfirm "${keyrings[@]}"; then
+        log_success "Chaveiro reconstruído e atualizado."
+        return 0
+    fi
+
+    log_warn "Não foi possível atualizar o chaveiro do pacman."
+    log_info "  Se a instalação falhar com erros de assinatura, rode manualmente:"
+    log_info "    sudo pacman-key --init && sudo pacman-key --populate"
+    log_info "    sudo pacman -Sy --needed archlinux-keyring && sudo pacman -Syu"
+    return 1
+}
+
 # Detectar AUR helper disponível (paru, yay, pikaur, pakku)
 # IMPORTANTE: esta função "retorna" o nome do helper via stdout (capturado por
 # AUR_HELPER=$(detect_aur_helper)). Por isso TODO log aqui vai para o stderr (>&2),
@@ -88,8 +198,25 @@ check_base_packages_arch() {
     if [ ${#missing[@]} -gt 0 ]; then
         log_warn "Pacotes base ausentes: ${missing[*]}"
         log_info "Instalando pacotes base necessários..."
-        sudo pacman -S --needed --noconfirm "${missing[@]}"
-        return $?
+        if sudo pacman -S --needed --noconfirm "${missing[@]}"; then
+            log_success "Pacotes base instalados."
+            return 0
+        fi
+
+        # Esta é a PRIMEIRA operação do pacman em toda a instalação, e falha
+        # aqui é quase sempre chaveiro vencido (ISO antiga / sistema parado há
+        # meses) — não pacote inexistente. Reparar e tentar de novo evita
+        # abortar a instalação inteira na etapa de verificação.
+        # O retry usa '-Syu' porque refresh_arch_keyring() acabou de rodar um
+        # '-Sy': completar o upgrade fecha a janela de partial upgrade.
+        log_warn "Falha ao instalar os pacotes base — tentando reparar o chaveiro do pacman."
+        refresh_arch_keyring || true
+        if sudo pacman -Syu --needed --noconfirm "${missing[@]}"; then
+            log_success "Pacotes base instalados após reparo do chaveiro."
+            return 0
+        fi
+        log_error "Não foi possível instalar os pacotes base: ${missing[*]}"
+        return 1
     fi
 
     log_success "Pacotes base presentes: OK"
@@ -146,9 +273,12 @@ run_all_checks() {
     echo -e "${GREEN}      Verificações de Sistema                  ${NC}"
     echo -e "${BLUE}===============================================${NC}"
 
-    check_not_root   || return 1
-    check_internet   || return 1
-    check_distro     || return 1
+    check_not_root     || return 1
+    check_internet     || return 1
+    # Relógio ANTES de qualquer operação de pacote: hora errada faz o
+    # gerenciador recusar assinaturas válidas e culpar o pacote.
+    check_system_clock || true
+    check_distro       || return 1
 
     # Verificações específicas por distro
     if [ "${DISTRO:-}" = "arch" ]; then

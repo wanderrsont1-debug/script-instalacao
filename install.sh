@@ -41,19 +41,40 @@ LOG_FILE="$LOG_DIR/install-$(date +%Y%m%d_%H%M%S).log"
 # cor são removidos no fim, de uma vez.
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-_flush_log() {
+# NUNCA morrer em silêncio: se o 'set -e' for interromper o instalador, é
+# preciso dizer exatamente onde e por quê. Antes disso, uma falha inesperada
+# encerrava o script sem NENHUMA mensagem — parecia que ele tinha "terminado",
+# mas etapas inteiras (shell escolhido, tema, SDDM) nunca rodavam.
+#
+# MAS o trap ERR não pode ser quem imprime "FALHA FATAL": com 'set -E' ele
+# dispara no instante do erro, ANTES de o '|| log_warn' do chamador resolver —
+# e este instalador guarda quase todas as etapas com '|| log_warn' de propósito
+# (veja main()). Resultado da versão anterior: um único pacote AUR que falhou,
+# e foi devidamente tratado, gerava uma mensagem de falha fatal idêntica à de um
+# erro que realmente aborta o script. Isso treina o leitor do log a ignorar o
+# aviso justamente quando ele é verdadeiro.
+#
+# Agora o ERR apenas ANOTA onde ocorreu o último erro; quem decide se foi fatal
+# é o EXIT, que só grita se o instalador estiver de fato saindo com status != 0.
+_ERR_LOCATION=""
+_ERR_COMMAND=""
+trap '_ERR_LOCATION="${BASH_SOURCE[0]##*/}:${LINENO}"; _ERR_COMMAND="${BASH_COMMAND}"' ERR
+
+_on_exit() {
+    local rc=$?
+
+    if [ "$rc" -ne 0 ]; then
+        log_error "FALHA FATAL em ${_ERR_LOCATION:-local desconhecido} — comando: ${_ERR_COMMAND:-desconhecido}"
+        log_error "A instalação foi INTERROMPIDA aqui. Etapas seguintes NÃO foram executadas."
+        log_error "Log completo salvo em: ${LOG_FILE}"
+    fi
+
     # Fechar os descritores faz o tee ver EOF; o wait dá a ele tempo de gravar.
     exec 1>&- 2>&-
     wait 2>/dev/null || true
     sed -i $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' "$LOG_FILE" 2>/dev/null || true
 }
-trap _flush_log EXIT
-
-# NUNCA morrer em silêncio: se o 'set -e' for interromper o instalador, este
-# trap imprime exatamente onde e por quê. Antes disso, uma falha inesperada
-# encerrava o script sem NENHUMA mensagem — parecia que ele tinha "terminado",
-# mas etapas inteiras (shell escolhido, tema, SDDM) nunca rodavam.
-trap 'log_error "FALHA FATAL em ${BASH_SOURCE[0]##*/}:${LINENO} — comando: ${BASH_COMMAND}"; log_error "A instalação foi INTERROMPIDA aqui. Etapas seguintes NÃO foram executadas."; log_error "Log completo salvo em: ${LOG_FILE}"' ERR
+trap _on_exit EXIT
 source "$REPO_DIR/lib/checks.sh"
 source "$REPO_DIR/lib/packages.sh"
 source "$REPO_DIR/lib/dotfiles.sh"
@@ -135,6 +156,11 @@ main() {
         # Ajustes do shell que independem do compositor (agente polkit e, no
         # caso do Noctalia, a config base em ~/.local/state/noctalia).
         apply_shell_common "$REPO_DIR" || log_warn "Falha ao aplicar ajustes do shell escolhido."
+
+        # Sincronizar o tema de cursor em TODOS os mecanismos (niri, hyprland,
+        # environment.d, Xresources, GTK). Roda depois do deploy porque
+        # reescreve os arquivos que acabaram de ser copiados.
+        apply_cursor_theme || log_warn "Falha ao aplicar o tema de cursor."
 
         # Apontar o Niri para o shell escolhido (DMS ou Noctalia).
         # Específico do Niri (troca de includes .kdl); o Hyprland usa um único
