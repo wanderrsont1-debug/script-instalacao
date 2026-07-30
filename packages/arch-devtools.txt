@@ -54,5 +54,5 @@ python
 # funcionar sozinho, sem token para guardar em disco.
 #
 # ATENÇÃO ao nome: no Arch o pacote é 'github-cli' (o binário é que se chama
-# 'gh'). Não existe pacote chamado 'gh' aqui — no Fedora, sim.
+# 'gh').
 github-cli

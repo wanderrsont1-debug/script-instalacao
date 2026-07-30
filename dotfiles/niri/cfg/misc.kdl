@@ -19,7 +19,7 @@
     // O tema vem de $CURSOR_THEME (lib/utils.sh) e é reescrito aqui pelo
     // instalador em apply_cursor_theme() — não edite este nome à mão.
     cursor {
-        xcursor-theme "Bibata-Original-Amber"
+        xcursor-theme "Bibata-Modern-Amber"
         xcursor-size 28
     }
 

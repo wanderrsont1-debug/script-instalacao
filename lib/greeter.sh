@@ -16,15 +16,8 @@ source "$SCRIPT_DIR/utils.sh"
 ensure_sddm_installed() {
     log_info "Garantindo que o SDDM esteja instalado (verificação dedicada)..."
 
-    local is_fedora=false
-    [ "${DISTRO:-arch}" = "fedora" ] && is_fedora=true
-
     _sddm_present() {
-        if $is_fedora; then
-            rpm -q sddm &>/dev/null
-        else
-            pacman -Q sddm &>/dev/null
-        fi
+        pacman -Q sddm &>/dev/null
     }
 
     if _sddm_present && command -v sddm &>/dev/null; then
@@ -36,36 +29,30 @@ ensure_sddm_installed() {
 
     local attempt
     for attempt in 1 2 3; do
-        if $is_fedora; then
-            sudo dnf install -y sddm || true
+        # -S (sem sync): a base já foi sincronizada com -Syu antes. Na 2ª
+        # tentativa forçamos um -Syu para o caso de a base estar defasada.
+        # IMPORTANTE: -Syu, NUNCA -Sy — '-Sy pkg' é partial upgrade e pode
+        # instalar um sddm linkado contra libs mais novas que as do sistema
+        # (SDDM que não sobe no boot). É a mesma política documentada em
+        # install_arch_packages().
+        # Na 3ª tentativa adicionamos --overwrite '*' — causa comum e
+        # silenciosa de falha repetida é conflito de arquivo (ex.: sddm
+        # tentando instalar um arquivo que já existe no sistema), que
+        # --noconfirm sozinho NÃO resolve e faz o pacman abortar a
+        # transação inteira sempre do mesmo jeito.
+        if [ "$attempt" -ge 3 ]; then
+            sudo pacman -Syu --needed --noconfirm --overwrite '*' sddm || true
+        elif [ "$attempt" -ge 2 ]; then
+            sudo pacman -Syu --needed --noconfirm sddm || true
         else
-            # -S (sem sync): a base já foi sincronizada com -Syu antes. Na 2ª
-            # tentativa forçamos um -Syu para o caso de a base estar defasada.
-            # IMPORTANTE: -Syu, NUNCA -Sy — '-Sy pkg' é partial upgrade e pode
-            # instalar um sddm linkado contra libs mais novas que as do sistema
-            # (SDDM que não sobe no boot). É a mesma política documentada em
-            # install_arch_packages().
-            # Na 3ª tentativa adicionamos --overwrite '*' — causa comum e
-            # silenciosa de falha repetida é conflito de arquivo (ex.: sddm
-            # tentando instalar um arquivo que já existe no sistema), que
-            # --noconfirm sozinho NÃO resolve e faz o pacman abortar a
-            # transação inteira sempre do mesmo jeito.
-            if [ "$attempt" -ge 3 ]; then
-                sudo pacman -Syu --needed --noconfirm --overwrite '*' sddm || true
-            elif [ "$attempt" -ge 2 ]; then
-                sudo pacman -Syu --needed --noconfirm sddm || true
-            else
-                sudo pacman -S --needed --noconfirm sddm || true
-            fi
+            sudo pacman -S --needed --noconfirm sddm || true
         fi
 
         if _sddm_present && command -v sddm &>/dev/null; then
             log_success "SDDM instalado com sucesso (tentativa $attempt)."
             # Backend gráfico é obrigatório para o SDDM desenhar a tela de login.
-            if ! $is_fedora; then
-                sudo pacman -S --needed --noconfirm xorg-server \
-                    || log_warn "Falha ao instalar xorg-server — o SDDM pode não iniciar sem backend gráfico."
-            fi
+            sudo pacman -S --needed --noconfirm xorg-server \
+                || log_warn "Falha ao instalar xorg-server — o SDDM pode não iniciar sem backend gráfico."
             return 0
         fi
 
@@ -73,11 +60,7 @@ ensure_sddm_installed() {
     done
 
     log_error "NÃO foi possível instalar o SDDM automaticamente."
-    if $is_fedora; then
-        log_error "  Instale manualmente:  sudo dnf install sddm"
-    else
-        log_error "  Instale manualmente:  sudo pacman -S sddm xorg-server"
-    fi
+    log_error "  Instale manualmente:  sudo pacman -S sddm xorg-server"
     return 1
 }
 
@@ -302,11 +285,7 @@ verify_display_manager() {
     # armadilha para edições futuras (um 'if pkg_installed' sem '$' chamaria
     # a função sem argumento e inverteria o teste em silêncio).
     local dm_pkg_present=false
-    if [ "${DISTRO:-arch}" = "fedora" ]; then
-        rpm -q "$dm_service" &>/dev/null && dm_pkg_present=true
-    else
-        pacman -Q "$dm_service" &>/dev/null && dm_pkg_present=true
-    fi
+    pacman -Q "$dm_service" &>/dev/null && dm_pkg_present=true
 
     if $dm_pkg_present; then
         log_success "Pacote $dm_service instalado."
@@ -402,34 +381,25 @@ verify_display_manager() {
 
             # Oferecer instalação automática do xorg-server
             if prompt_yes_no "  Deseja instalar xorg-server agora para corrigir?" "S"; then
-                if [ "${DISTRO:-arch}" = "fedora" ]; then
-                    sudo dnf install -y xorg-x11-server-Xorg && {
-                        log_success "  xorg-server instalado."
-                        errors=$((errors - 1))
-                    } || log_error "  Falha ao instalar xorg-server."
-                else
-                    sudo pacman -S --needed --noconfirm xorg-server && {
-                        log_success "  xorg-server instalado."
-                        errors=$((errors - 1))
-                    } || log_error "  Falha ao instalar xorg-server."
-                fi
+                sudo pacman -S --needed --noconfirm xorg-server && {
+                    log_success "  xorg-server instalado."
+                    errors=$((errors - 1))
+                } || log_error "  Falha ao instalar xorg-server."
             fi
         fi
 
-        # 5c. Dependências Qt (Arch)
-        if [ "${DISTRO:-arch}" != "fedora" ]; then
-            log_info "7/7 — Verificando dependências Qt e tema..."
-            local qt_missing=()
-            for dep in qt6-5compat qt6-svg qt6-virtualkeyboard qt6-multimedia; do
-                pacman -Q "$dep" &>/dev/null || qt_missing+=("$dep")
-            done
-            if [ ${#qt_missing[@]} -gt 0 ]; then
-                log_warn "  Deps Qt ausentes: ${qt_missing[*]}"
-                log_info "  O tema SilentSDDM pode não renderizar corretamente."
-                warnings=$((warnings + 1))
-            else
-                log_success "  Dependências Qt presentes."
-            fi
+        # 5c. Dependências Qt
+        log_info "7/7 — Verificando dependências Qt e tema..."
+        local qt_missing=()
+        for dep in qt6-5compat qt6-svg qt6-virtualkeyboard qt6-multimedia; do
+            pacman -Q "$dep" &>/dev/null || qt_missing+=("$dep")
+        done
+        if [ ${#qt_missing[@]} -gt 0 ]; then
+            log_warn "  Deps Qt ausentes: ${qt_missing[*]}"
+            log_info "  O tema SilentSDDM pode não renderizar corretamente."
+            warnings=$((warnings + 1))
+        else
+            log_success "  Dependências Qt presentes."
         fi
 
         # 5d. Tema SilentSDDM
@@ -494,7 +464,7 @@ verify_niri_environment() {
         log_success "niri encontrado: $(command -v niri)"
     else
         log_error "Binário 'niri' NÃO encontrado no PATH!"
-        log_info "  → Instale com: sudo pacman -S niri  (Arch) | sudo dnf install niri  (Fedora)"
+        log_info "  → Instale com: sudo pacman -S niri"
         errors=$((errors + 1))
     fi
 
@@ -506,11 +476,7 @@ verify_niri_environment() {
             log_success "noctalia encontrado: $(command -v noctalia)"
         else
             log_error "Binário 'noctalia' NÃO encontrado!"
-            if [ "${DISTRO:-arch}" = "fedora" ]; then
-                log_info "  → Instale com: sudo dnf install noctalia"
-            else
-                log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
-            fi
+            log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
             errors=$((errors + 1))
         fi
     else
@@ -705,7 +671,7 @@ verify_hyprland_environment() {
         log_success "hyprland encontrado: $(command -v Hyprland 2>/dev/null || command -v hyprland)"
     else
         log_error "Binário 'Hyprland' NÃO encontrado no PATH!"
-        log_info "  → Instale com: sudo pacman -S hyprland  (Arch) | sudo dnf install hyprland  (Fedora)"
+        log_info "  → Instale com: sudo pacman -S hyprland"
         errors=$((errors + 1))
     fi
 
@@ -715,11 +681,7 @@ verify_hyprland_environment() {
         log_success "noctalia encontrado: $(command -v noctalia)"
     else
         log_error "Binário 'noctalia' NÃO encontrado!"
-        if [ "${DISTRO:-arch}" = "fedora" ]; then
-            log_info "  → Instale com: sudo dnf install noctalia"
-        else
-            log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
-        fi
+        log_info "  → Instale com: paru -S noctalia-git  (ou: sudo pacman -S noctalia)"
         errors=$((errors + 1))
     fi
 
@@ -771,15 +733,9 @@ verify_hyprland_environment() {
 
     # ── 6. Portal do XDG para o Hyprland ──────────────────────
     log_info "6/6 — Verificando xdg-desktop-portal-hyprland..."
-    if [ "${DISTRO:-arch}" = "fedora" ]; then
-        rpm -q xdg-desktop-portal-hyprland &>/dev/null \
-            && log_success "xdg-desktop-portal-hyprland instalado." \
-            || { log_warn "xdg-desktop-portal-hyprland ausente (screencast/compartilhamento de tela pode falhar)."; warnings=$((warnings + 1)); }
-    else
-        pacman -Q xdg-desktop-portal-hyprland &>/dev/null \
-            && log_success "xdg-desktop-portal-hyprland instalado." \
-            || { log_warn "xdg-desktop-portal-hyprland ausente (screencast/compartilhamento de tela pode falhar)."; warnings=$((warnings + 1)); }
-    fi
+    pacman -Q xdg-desktop-portal-hyprland &>/dev/null \
+        && log_success "xdg-desktop-portal-hyprland instalado." \
+        || { log_warn "xdg-desktop-portal-hyprland ausente (screencast/compartilhamento de tela pode falhar)."; warnings=$((warnings + 1)); }
 
     # ── Resultado final ───────────────────────────────────────
     echo ""

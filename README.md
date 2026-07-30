@@ -1,10 +1,9 @@
 # Script de Instalação — Niri / Hyprland
 
 ![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)
-![Fedora](https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
-Script de instalação automatizada para recriar um ambiente Wayland completo em Arch Linux / CachyOS / Fedora e derivados.
+Script de instalação automatizada para recriar um ambiente Wayland completo em Arch Linux / CachyOS e derivados.
 
 ---
 
@@ -14,8 +13,8 @@ No começo da instalação você escolhe **o compositor** e, no caso do Niri, **
 
 | Compositor | Config | Desktop Shell | Distros |
 |---|---|---|---|
-| **Niri** | KDL (`~/.config/niri`) | **DankMaterialShell (DMS)** *ou* **Noctalia Shell (beta 5.x)** — escolha no início | Arch, CachyOS, Fedora |
-| **Hyprland** | Lua (`~/.config/hypr/hyprland.lua`) | **Noctalia Shell** (fixado — a config incluída é cabeada para o Noctalia) | Arch, CachyOS, Fedora |
+| **Niri** | KDL (`~/.config/niri`) | **DankMaterialShell (DMS)** *ou* **Noctalia Shell (beta 5.x)** — escolha no início | Arch, CachyOS |
+| **Hyprland** | Lua (`~/.config/hypr/hyprland.lua`) | **Noctalia Shell** (fixado — a config incluída é cabeada para o Noctalia) | Arch, CachyOS |
 
 **1) Compositor** (`select_compositor`):
 
@@ -47,7 +46,7 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 
 
 
-## 📦 O que é instalado (Arch)
+## 📦 O que é instalado
 
 | Categoria | Pacotes |
 |---|---|
@@ -72,7 +71,7 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 | Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |
 | Display Manager | `sddm` (com tema SilentSDDM) |
 | Segurança | `gnome-keyring`, `seahorse`, `ufw` (o agente polkit vem do próprio shell) |
-| Navegadores (menu) | **Arch:** `firefox`, `zen-browser-bin`, `helium-browser-bin`, `brave-bin`, `librewolf-bin`, `mullvad-browser-bin` — seleção múltipla<br>**Fedora:** `firefox` (nativo), Zen e Helium (COPR), Brave (instalador oficial), LibreWolf e Vivaldi (repo do fornecedor) |
+| Navegadores (menu) | `firefox`, `zen-browser-bin`, `helium-browser-bin`, `brave-bin`, `brave-origin-bin`, `librewolf-bin`, `vivaldi`, `mullvad-browser-bin` — seleção múltipla |
 | Codecs (opt-in) | `gst-plugins-*`, `x264`/`x265`, `dav1d`, `aom`, `svt-av1`, `opus`, `flac`, `lame`, `libva-utils`, … |
 | Bibliotecas (opt-in) | `man-db`, `bash-completion`, `7zip`, `unrar`, `gvfs*`, `ntfs-3g`, `exfatprogs`, `usbutils`, `reflector`, … |
 | Opcionais | `anki`, `calibre` |
@@ -95,15 +94,14 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 ## ⚙️ Configurações de sistema aplicadas
 
 - **Tema de cursor com fonte única** — `CURSOR_THEME` / `CURSOR_SIZE` em `lib/utils.sh` (padrão `Bibata-Original-Amber`, 28). O instalador reescreve os **6** mecanismos que decidem o cursor no Linux — niri (`misc.kdl`), Hyprland (`XCURSOR_THEME`), `environment.d`, `.Xresources`, GTK 3/4 (`settings.ini`) e `~/.icons/default` — para que o cursor não mude ao passar de uma janela para outra. Trocar de variante é uma linha: `CURSOR_THEME=Bibata-Modern-Ice bash install.sh`
-- **Relógio verificado antes de tudo** — hora errada faz o pacman/dnf recusar assinaturas válidas e culpar o pacote; o script ativa o NTP e avisa se não conseguir
-- **Chaveiro do pacman reparado automaticamente** (Arch) — `archlinux-keyring` (+ `cachyos-keyring`/`endeavouros-keyring`/`manjaro-keyring`, conforme a distro) é atualizado imediatamente antes do `-Syu`, com reconstrução via `pacman-key --init/--populate` em caso de falha. Sem isso, uma ISO antiga fazia toda a instalação falhar em silêncio
-- **`[multilib]` habilitado sob demanda** (Arch) — só quando você seleciona algo que precisa de 32-bit (Steam, Wine, `lib32-*`), editando o `pacman.conf` com backup e sem tocar em outras seções
-- **Drivers de vídeo detectados por GPU** (Arch) — via `lspci`, com fallback para o `sysfs` quando o `pciutils` ainda não está instalado; nomes de pacote extintos são filtrados para não derrubar a transação inteira
+- **Relógio verificado antes de tudo** — hora errada faz o pacman recusar assinaturas válidas e culpar o pacote; o script ativa o NTP e avisa se não conseguir
+- **Chaveiro do pacman reparado automaticamente** — `archlinux-keyring` (+ `cachyos-keyring`/`endeavouros-keyring`/`manjaro-keyring`, conforme a distro) é atualizado imediatamente antes do `-Syu`, com reconstrução via `pacman-key --init/--populate` em caso de falha. Sem isso, uma ISO antiga fazia toda a instalação falhar em silêncio
+- **`[multilib]` habilitado sob demanda** — só quando você seleciona algo que precisa de 32-bit (Steam, Wine, `lib32-*`), editando o `pacman.conf` com backup e sem tocar em outras seções
+- **Drivers de vídeo detectados por GPU** — via `lspci`, com fallback para o `sysfs` quando o `pciutils` ainda não está instalado; nomes de pacote extintos são filtrados para não derrubar a transação inteira
 - **Snapshot pré-instalação** — snapper (`-c root`) ou timeshift, criado antes das mudanças
-- **Mirrors otimizados** — `reflector` (20 mais rápidos, HTTPS) com backup do mirrorlist (Arch)
+- **Mirrors otimizados** — `reflector` (20 mais rápidos, HTTPS) com backup do mirrorlist
 - **Grupos do usuário** — adiciona a `video`, `input`, `wheel`, `storage`, `audio`, `network` (só os existentes)
 - **Flatpak + Flathub** — remote Flathub adicionado automaticamente
-- **Navegadores nunca via Flatpak** — no Fedora cada navegador vem da origem nativa recomendada pelo próprio projeto (COPR, repositório do fornecedor ou instalador oficial), por decisão de projeto
 - **UFW** — `deny incoming` / `allow outgoing`, ativo e habilitado no boot
 - **Nenhum agente polkit avulso é instalado** — DMS e Noctalia já trazem o seu (`PolkitService.qml` no DMS; `polkit_agent = true` no Noctalia). Dois agentes na mesma sessão disputam o mesmo nome no D-Bus e um deles falha com *"An authentication agent already exists for the given subject"*. Por isso `polkit-gnome`/`mate-polkit` foram removidos das listas de pacotes, a verificação final avisa se sobrar um `spawn-at-startup` de agente polkit na config do Niri, e — como rede de segurança — o autostart XDG de agentes de terceiros é desativado via `~/.config/autostart` (apenas quando o `.desktop` de fato se aplicaria à sessão, respeitando `OnlyShowIn`/`NotShowIn`)
 
@@ -116,18 +114,17 @@ script-instalacao/
 ├── install.sh                  ← Instalador principal
 ├── backup_local.sh             ← Backup do sistema atual
 ├── install_arch.sh             ← Wrapper Arch (legado)
-├── install_fedora.sh           ← Wrapper Fedora (legado)
 ├── packages.txt                ← Lista de referência de pacotes
 │
 ├── lib/                        ← Bibliotecas modulares
 │   ├── utils.sh                (cores, logging, prompt)
 │   ├── checks.sh               (detecção de distro, AUR helper)
-│   ├── packages.sh             (instalação pacman/dnf/AUR)
+│   ├── packages.sh             (instalação pacman/AUR)
 │   ├── dotfiles.sh             (deploy de dotfiles + seleção de shell; Niri/Hyprland)
 │   ├── greeter.sh              (configuração SDDM + garantia do SDDM + verificações)
 │   └── system.sh               (snapshot, mirrors, UFW, Flathub, grupos)
 │
-├── packages/                   ← Listas de pacotes por distro/ambiente
+├── packages/                   ← Listas de pacotes por categoria
 │   ├── arch-base.txt           ← Apps comuns (independentes do compositor)
 │   ├── arch-niri.txt           ← Compositor Niri
 │   ├── arch-hyprland.txt       ← Compositor Hyprland
@@ -136,11 +133,8 @@ script-instalacao/
 │   ├── arch-browsers.txt       ← Navegadores (menu de seleção múltipla)
 │   ├── arch-codecs.txt         ← Codecs multimídia (opt-in)
 │   ├── arch-libs.txt           ← Bibliotecas/utilitários essenciais (opt-in)
-│   ├── arch-optional.txt
-│   │
-│   ├── fedora-browsers.txt     ← Navegadores no Fedora (menu; sem Flatpak)
-│   ├── fedora-libs.txt         ← Bibliotecas/utilitários essenciais (opt-in)
-│   └── fedora-optional.txt     ← Apps opcionais (menu de seleção múltipla)
+│   ├── arch-devtools.txt       ← Ferramentas de empacotamento (opt-in)
+│   └── arch-optional.txt       ← Apps opcionais (menu de seleção múltipla)
 │
 ├── dotfiles/                   ← Dotfiles (o compositor não escolhido é ignorado)
 │   ├── niri/                   ← Config do Niri (KDL)

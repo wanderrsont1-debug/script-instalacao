@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# Instalador Unificado de Ambiente — Arch Linux / Fedora
+# Instalador Unificado de Ambiente — Arch Linux / CachyOS
 # Ambientes suportados:
 #   - Niri (DMS ou Noctalia)
 #   - Hyprland (Noctalia, config Lua)
@@ -89,7 +89,7 @@ show_welcome() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║       Instalador Unificado de Ambiente           ║${NC}"
     echo -e "${BLUE}╠══════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║  Suporta: Arch Linux / CachyOS / Fedora          ║${NC}"
+    echo -e "${CYAN}║  Suporta: Arch Linux / CachyOS                   ║${NC}"
     echo -e "${CYAN}║  Compositor: Niri ou Hyprland                    ║${NC}"
     echo -e "${CYAN}║  Shell: DMS ou Noctalia                          ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
@@ -140,11 +140,7 @@ main() {
     # 'set -e' ativo, a falha de UM pacote abortaria todo o script ANTES de habilitar
     # o SDDM e o graphical.target — deixando o sistema preso no TTY no próximo boot.
     # As verificações finais (verify_*) apontam o que ficou faltando.
-    if [ "${DISTRO}" = "arch" ]; then
-        install_arch_packages "$REPO_DIR" || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
-    elif [ "${DISTRO}" = "fedora" ]; then
-        install_fedora_packages "$REPO_DIR" || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
-    fi
+    install_arch_packages "$REPO_DIR" || log_warn "Alguns pacotes falharam — continuando para configurar o ambiente."
 
     # Aplicar dotfiles (compositor escolhido + apps comuns)
     # Guardas '|| log_warn': nenhuma falha de dotfile pode impedir as etapas

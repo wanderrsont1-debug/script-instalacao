@@ -7,5 +7,7 @@ firefox             | Firefox (extra) — padrão, código aberto
 zen-browser-bin     | Zen Browser (cachyos) — baseado no Firefox, foco em produtividade
 helium-browser-bin  | Helium Browser (cachyos) — Chromium minimalista e privado
 brave-bin           | Brave (cachyos) — Chromium com bloqueio de anúncios integrado
+brave-origin-bin    | Brave Origin (cachyos) — variante minimalista do Brave, sem cripto/recompensas
 librewolf-bin       | LibreWolf (cachyos) — Firefox focado em privacidade
+vivaldi             | Vivaldi (extra) — altamente personalizável
 mullvad-browser-bin | Mullvad Browser (cachyos) — anti-fingerprinting (base Tor)

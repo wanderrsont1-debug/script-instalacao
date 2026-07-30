@@ -25,7 +25,7 @@ NC='\033[0m' # No Color
 # Agora o nome existe UMA vez. install_cursor_theme() instala este tema e
 # apply_cursor_theme() reescreve todos os configs implantados para ele.
 # Dá para trocar sem editar o script:  CURSOR_THEME=Bibata-Modern-Ice ./install.sh
-CURSOR_THEME="${CURSOR_THEME:-Bibata-Original-Amber}"
+CURSOR_THEME="${CURSOR_THEME:-Bibata-Modern-Amber}"
 CURSOR_SIZE="${CURSOR_SIZE:-28}"
 
 # Funções de logging
@@ -134,13 +134,7 @@ select_shell() {
     echo -e "${YELLOW}          Escolha do Desktop Shell${NC}"
     echo -e "${BLUE}===============================================${NC}"
     echo -e "  ${GREEN}1${NC}) DankMaterialShell (DMS)  — estável, padrão do projeto"
-    # A origem do Noctalia muda por distro: no Fedora ele está nos repositórios
-    # oficiais (updates); no Arch/CachyOS vem do repo cachyos ou do AUR.
-    if [ "${DISTRO:-arch}" = "fedora" ]; then
-        echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — repositórios oficiais do Fedora"
-    else
-        echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — via repo cachyos ou AUR (noctalia-git)"
-    fi
+    echo -e "  ${GREEN}2${NC}) Noctalia Shell (BETA 5.x) — via repo cachyos ou AUR (noctalia-git)"
     echo ""
     local reply
     read -p "Sua escolha [1]: " reply
@@ -273,7 +267,7 @@ backup_existing_configs() {
 # por último, para o /dev/tcp do próprio bash — evitando falso "sem internet".
 check_internet() {
     log_info "Verificando conectividade com a internet..."
-    local targets=("archlinux.org" "fedoraproject.org" "1.1.1.1")
+    local targets=("archlinux.org" "cachyos.org" "1.1.1.1")
 
     for target in "${targets[@]}"; do
         # 1. curl (se disponível)

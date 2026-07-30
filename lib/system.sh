@@ -36,9 +36,7 @@ create_pre_install_snapshot() {
     # 2. timeshift (instala se o usuário quiser)
     if ! command -v timeshift &>/dev/null; then
         if prompt_yes_no "timeshift não está instalado. Deseja instalá-lo para criar o snapshot?" "S"; then
-            if [ "${DISTRO:-arch}" = "fedora" ]; then
-                sudo dnf install -y timeshift || { log_warn "Falha ao instalar timeshift — snapshot ignorado."; return 0; }
-            elif pacman -Si timeshift &>/dev/null 2>&1; then
+            if pacman -Si timeshift &>/dev/null 2>&1; then
                 sudo pacman -S --needed --noconfirm timeshift || { log_warn "Falha ao instalar timeshift — snapshot ignorado."; return 0; }
             elif [ "${AUR_HELPER:-none}" != "none" ]; then
                 "$AUR_HELPER" -S --needed --noconfirm timeshift || { log_warn "Falha ao instalar timeshift — snapshot ignorado."; return 0; }
@@ -69,8 +67,6 @@ create_pre_install_snapshot() {
 # Roda ANTES das instalações grandes para acelerar downloads.
 # ─────────────────────────────────────────────────────────────
 optimize_mirrors_arch() {
-    [ "${DISTRO:-arch}" = "fedora" ] && return 0
-
     if ! prompt_yes_no "Deseja otimizar a lista de mirrors do pacman com o reflector (downloads mais rápidos)?" "S"; then
         log_info "Otimização de mirrors ignorada."
         return 0

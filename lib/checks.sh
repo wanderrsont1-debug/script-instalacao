@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verificações de sistema pré-instalação
-# Inspirado no donarch (GitLab), adaptado para suportar Arch + Fedora
+# Inspirado no donarch (GitLab), adaptado para Arch Linux / CachyOS
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
@@ -27,10 +27,7 @@ check_distro() {
     local os="$ID"
     local like="${ID_LIKE:-}"
 
-    if [[ "$os" == "fedora" ]]; then
-        log_success "Distribuição detectada: Fedora ($VERSION_ID)"
-        export DISTRO="fedora"
-    elif [[ "$os" == "arch" || "$os" == "cachyos" || "$like" == *"arch"* ]]; then
+    if [[ "$os" == "arch" || "$os" == "cachyos" || "$like" == *"arch"* ]]; then
         log_success "Distribuição detectada: Arch Linux / CachyOS ($os)"
         export DISTRO="arch"
     else
@@ -49,8 +46,8 @@ check_distro() {
 # Relógio do sistema
 #
 # Data/hora errada é uma das causas mais frequentes — e mais mal
-# diagnosticadas — de falha logo no início de uma instalação limpa: o pacman e
-# o dnf recusam assinaturas válidas com mensagens que apontam para o pacote
+# diagnosticadas — de falha logo no início de uma instalação limpa: o pacman
+# recusa assinaturas válidas com mensagens que apontam para o pacote
 # ("invalid or corrupted package", "signature is from the future"), nunca para
 # o relógio. Em máquina recém-instalada, dual boot com Windows ou bateria de
 # CMOS fraca isso acontece o tempo todo.
@@ -128,8 +125,6 @@ arch_keyring_packages() {
 # o chamador é OBRIGADO a executar um '-Syu' logo em seguida, sem instalar
 # mais nada no meio, para não deixar janela de partial upgrade.
 refresh_arch_keyring() {
-    [ "${DISTRO:-arch}" = "fedora" ] && return 0
-
     local keyrings=()
     mapfile -t keyrings < <(arch_keyring_packages)
 
@@ -223,50 +218,6 @@ check_base_packages_arch() {
     return 0
 }
 
-# Otimizar o dnf.conf para downloads mais rápidos (Fedora)
-#
-# Antes isto vivia DENTRO do 'if' de pacotes ausentes em
-# check_base_packages_fedora(): num sistema que já tivesse git/curl/tar/unzip/
-# fontconfig instalados, a otimização nunca era aplicada. Agora é uma função
-# própria, chamada sempre.
-#
-# NOTA: 'defaultyes=True' foi deliberadamente REMOVIDO daqui. Ele alterava o
-# padrão de TODO comando dnf do sistema, para sempre — inclusive os que o
-# usuário rodasse manualmente depois, onde um 'dnf remove' distraído passaria
-# a assumir "sim". O instalador já passa '-y' explicitamente onde precisa.
-optimize_dnf_conf() {
-    if grep -q "^max_parallel_downloads=10" /etc/dnf/dnf.conf 2>/dev/null; then
-        return 0
-    fi
-
-    log_info "Otimizando dnf.conf para downloads mais rápidos..."
-    sudo sh -c 'grep -q "^max_parallel_downloads" /etc/dnf/dnf.conf && sed -i "s/^max_parallel_downloads.*/max_parallel_downloads=10/" /etc/dnf/dnf.conf || echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf'
-    sudo sh -c 'grep -q "^fastestmirror" /etc/dnf/dnf.conf && sed -i "s/^fastestmirror.*/fastestmirror=False/" /etc/dnf/dnf.conf || echo "fastestmirror=False" >> /etc/dnf/dnf.conf'
-    return 0
-}
-
-# Verificar pacotes base necessários (Fedora)
-check_base_packages_fedora() {
-    local missing=()
-    local required=("git" "curl" "tar" "unzip" "fontconfig")
-
-    for pkg in "${required[@]}"; do
-        if ! rpm -q "$pkg" &>/dev/null; then
-            missing+=("$pkg")
-        fi
-    done
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        log_warn "Pacotes base ausentes: ${missing[*]}"
-        log_info "Instalando pacotes base necessários..."
-        sudo dnf install -y "${missing[@]}"
-        return $?
-    fi
-
-    log_success "Pacotes base presentes: OK"
-    return 0
-}
-
 # Executar todas as verificações em sequência
 run_all_checks() {
     echo -e "${BLUE}===============================================${NC}"
@@ -280,35 +231,27 @@ run_all_checks() {
     check_system_clock || true
     check_distro       || return 1
 
-    # Verificações específicas por distro
-    if [ "${DISTRO:-}" = "arch" ]; then
-        check_base_packages_arch || return 1
+    check_base_packages_arch || return 1
 
-        # Detectar e exportar AUR helper
-        AUR_HELPER=$(detect_aur_helper)
+    # Detectar e exportar AUR helper
+    AUR_HELPER=$(detect_aur_helper)
 
-        # Sem helper? No CachyOS o paru existe como pacote binário no repo
-        # oficial — dá para instalar via pacman, sem compilar nada.
-        if [ "$AUR_HELPER" = "none" ] && pacman -Si paru &>/dev/null; then
-            if prompt_yes_no "Nenhum AUR helper encontrado. Instalar o 'paru' agora via pacman (repo CachyOS)?" "S"; then
-                if sudo pacman -S --needed --noconfirm paru; then
-                    AUR_HELPER="paru"
-                    log_success "paru instalado — pacotes AUR habilitados."
-                else
-                    log_warn "Falha ao instalar o paru."
-                fi
+    # Sem helper? No CachyOS o paru existe como pacote binário no repo
+    # oficial — dá para instalar via pacman, sem compilar nada.
+    if [ "$AUR_HELPER" = "none" ] && pacman -Si paru &>/dev/null; then
+        if prompt_yes_no "Nenhum AUR helper encontrado. Instalar o 'paru' agora via pacman (repo CachyOS)?" "S"; then
+            if sudo pacman -S --needed --noconfirm paru; then
+                AUR_HELPER="paru"
+                log_success "paru instalado — pacotes AUR habilitados."
+            else
+                log_warn "Falha ao instalar o paru."
             fi
         fi
+    fi
 
-        export AUR_HELPER
-        if [ "$AUR_HELPER" = "none" ]; then
-            log_warn "Continuando sem AUR helper. Pacotes AUR serão ignorados."
-        fi
-    elif [ "${DISTRO:-}" = "fedora" ]; then
-        # Otimizar o dnf ANTES de qualquer download, sempre — inclusive quando
-        # os pacotes base já estão todos presentes.
-        optimize_dnf_conf
-        check_base_packages_fedora || return 1
+    export AUR_HELPER
+    if [ "$AUR_HELPER" = "none" ]; then
+        log_warn "Continuando sem AUR helper. Pacotes AUR serão ignorados."
     fi
 
     echo -e "${BLUE}===============================================${NC}"
