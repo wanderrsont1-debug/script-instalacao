@@ -29,6 +29,11 @@ usbutils
 pciutils
 lsof
 
+# Controle de brilho via DDC/CI (monitores externos) — usado pelo Noctalia
+# Shell para o slider/OSD de brilho funcionar em monitores que não expõem
+# backlight por ACPI (a maioria dos externos via HDMI/DisplayPort).
+ddcutil
+
 # === Rede / mirrors / gráficos ===
 reflector
 vulkan-icd-loader
