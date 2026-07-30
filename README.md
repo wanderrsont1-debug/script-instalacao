@@ -65,6 +65,10 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 | Rede | `networkmanager` |
 | Multimídia | `mpv`, `ffmpeg`, `gst-plugins-*` |
 | Apps GUI | `nautilus`, `keepassxc`, `gnome-disk-utility`, `flatpak` |
+| Plataforma Qt (Wayland) | `qt5-wayland`, `qt6-wayland` — **obrigatórios**: sem eles apps Qt (KeePassXC é Qt5) não abrem numa sessão Wayland pura |
+| Empacotamento (opt-in) | `dpkg` (deb), `rpm-tools` (rpm), `libarchive`/bsdtar (pacman), `squashfs-tools` + `fuse2` (AppImage), `desktop-file-utils`, `patchelf`, `nodejs`, `npm`, `python` |
+| Cursor | `bibata-cursor-theme-bin` (AUR, pré-compilado) → `bibata-cursor-theme` → tarball oficial. Variante padrão: **Bibata-Original-Amber** |
+| Vídeo / GPU | Detectado automaticamente: `mesa`, `vulkan-icd-loader`, `libva-utils` + `vulkan-radeon` (AMD) / `vulkan-intel`, `intel-media-driver` (Intel) + equivalentes `lib32-*` se o multilib estiver ativo. NVIDIA é **opt-in** (`nvidia-open-dkms`) |
 | Fontes | `noto-fonts`, `noto-fonts-emoji`, `cantarell-fonts`, `ttf-meslo-nerd` |
 | Display Manager | `sddm` (com tema SilentSDDM) |
 | Segurança | `gnome-keyring`, `seahorse`, `ufw` (o agente polkit vem do próprio shell) |
@@ -90,6 +94,11 @@ Ao executar, o script perguntará o compositor (Niri/Hyprland) e o shell, e ent�
 
 ## ⚙️ Configurações de sistema aplicadas
 
+- **Tema de cursor com fonte única** — `CURSOR_THEME` / `CURSOR_SIZE` em `lib/utils.sh` (padrão `Bibata-Original-Amber`, 28). O instalador reescreve os **6** mecanismos que decidem o cursor no Linux — niri (`misc.kdl`), Hyprland (`XCURSOR_THEME`), `environment.d`, `.Xresources`, GTK 3/4 (`settings.ini`) e `~/.icons/default` — para que o cursor não mude ao passar de uma janela para outra. Trocar de variante é uma linha: `CURSOR_THEME=Bibata-Modern-Ice bash install.sh`
+- **Relógio verificado antes de tudo** — hora errada faz o pacman/dnf recusar assinaturas válidas e culpar o pacote; o script ativa o NTP e avisa se não conseguir
+- **Chaveiro do pacman reparado automaticamente** (Arch) — `archlinux-keyring` (+ `cachyos-keyring`/`endeavouros-keyring`/`manjaro-keyring`, conforme a distro) é atualizado imediatamente antes do `-Syu`, com reconstrução via `pacman-key --init/--populate` em caso de falha. Sem isso, uma ISO antiga fazia toda a instalação falhar em silêncio
+- **`[multilib]` habilitado sob demanda** (Arch) — só quando você seleciona algo que precisa de 32-bit (Steam, Wine, `lib32-*`), editando o `pacman.conf` com backup e sem tocar em outras seções
+- **Drivers de vídeo detectados por GPU** (Arch) — via `lspci`, com fallback para o `sysfs` quando o `pciutils` ainda não está instalado; nomes de pacote extintos são filtrados para não derrubar a transação inteira
 - **Snapshot pré-instalação** — snapper (`-c root`) ou timeshift, criado antes das mudanças
 - **Mirrors otimizados** — `reflector` (20 mais rápidos, HTTPS) com backup do mirrorlist (Arch)
 - **Grupos do usuário** — adiciona a `video`, `input`, `wheel`, `storage`, `audio`, `network` (só os existentes)

@@ -16,9 +16,10 @@
     // o tamanho 24 daqui nunca teve efeito. O tema também estava errado:
     // "Bibata-Modern-Amber" não existe nos repositórios do Fedora e não era
     // instalado por este script, então o cursor caía no padrão do sistema.
-    // O instalador agora instala Bibata-Modern-Ice (install_cursor_theme).
+    // O tema vem de $CURSOR_THEME (lib/utils.sh) e é reescrito aqui pelo
+    // instalador em apply_cursor_theme() — não edite este nome à mão.
     cursor {
-        xcursor-theme "Bibata-Modern-Ice"
+        xcursor-theme "Bibata-Original-Amber"
         xcursor-size 28
     }
 

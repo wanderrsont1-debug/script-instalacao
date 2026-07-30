@@ -1,0 +1,37 @@
+# Ferramentas para EMPACOTAR programas em AppImage / deb / rpm / pacman (Fedora)
+#
+# Equivalente de packages/arch-devtools.txt — veja lá a explicação completa e o
+# erro real ("exit code 127" do bsdtar) que motivou esta lista.
+#
+# Diferenças de nome em relação ao Arch:
+#   rpm-tools      → rpm-build
+#   libarchive     → bsdtar        (no Fedora o binário tem pacote próprio)
+#   fuse2          → fuse          (o FUSE 2, necessário para RODAR AppImage)
+#   base-devel     → @development-tools / gcc, make, binutils, fakeroot
+#
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === Empacotadores nativos chamados pelo electron-builder/fpm ===
+dpkg
+rpm-build
+bsdtar
+squashfs-tools
+
+# === Compilação de módulos nativos (node-gyp) e utilitários de build ===
+gcc
+gcc-c++
+make
+binutils
+fakeroot
+
+# === Validação e ajuste dos binários gerados ===
+desktop-file-utils
+patchelf
+
+# === Necessário para EXECUTAR o AppImage depois de gerado ===
+fuse
+
+# === Toolchain do projeto (electron-builder roda sobre Node) ===
+nodejs
+npm
+python3

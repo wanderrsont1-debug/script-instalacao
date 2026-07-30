@@ -65,6 +65,24 @@ pipewire-alsa
 wireplumber
 pavucontrol
 
+# === Plugins de plataforma Qt para Wayland ===
+# SEM ISTO APPS Qt NÃO ABREM neste ambiente. Numa sessão Wayland pura (Niri /
+# Hyprland, sem DE e sem XWayland), um app Qt precisa do plugin de plataforma
+# 'wayland' para conseguir criar janela; sem ele morre com
+#   "This application failed to start because no Qt platform plugin could be
+#    initialized" / "Could not load the Qt platform plugin wayland".
+#
+# O caso concreto é o KeePassXC: no Arch ele é Qt5 (ldd mostra libQt5Widgets,
+# libQt5Svg, ...). O pacman puxa 'qt5-svg' e 'qt5-x11extras' automaticamente,
+# porque são dependências declaradas — mas 'qt5-wayland' NÃO é dependência de
+# ninguém, é escolha da sessão. Por isso ele nunca vinha junto e a falha só
+# aparecia na hora de abrir o programa.
+#
+# qt6-wayland cobre os apps Qt6 do ambiente (o próprio SDDM/tema, qBittorrent,
+# etc.), pelo mesmo motivo.
+qt5-wayland
+qt6-wayland
+
 # === Integração de sistema ===
 xdg-utils
 libsecret

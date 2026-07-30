@@ -1,0 +1,46 @@
+# Ferramentas para EMPACOTAR programas em AppImage / deb / rpm / pacman (Arch)
+#
+# Esta lista existe porque o electron-builder (e o fpm, que ele baixa sozinho)
+# NÃO traz os empacotadores nativos: ele apenas CHAMA os binários do sistema.
+# Quando um deles falta, o erro não diz "instale o pacote X" — sai um
+# "exit code 127" cru vindo do /bin/bash, que é command-not-found.
+#
+# Exemplo real, colhido do build.log do projeto StudyFlux (alvo 'pacman'):
+#   Process failed: /bin/bash failed (exit code 127). Full command was:
+#   ["/bin/bash","-c","LANG=C bsdtar -czf .MTREE --format=mtree ..."]
+# Era só o 'bsdtar' ausente — mas a mensagem não menciona bsdtar como pacote.
+#
+# Mapeamento binário → pacote (verificado com 'pacman -Qqo' neste sistema):
+#   bsdtar                → libarchive          (alvo pacman)
+#   rpmbuild              → rpm-tools           (alvo rpm)
+#   dpkg-deb              → dpkg                (alvo deb)
+#   mksquashfs            → squashfs-tools      (alvo AppImage)
+#   desktop-file-validate → desktop-file-utils  (valida o .desktop gerado)
+#   fakeroot, strip, make, gcc → base-devel     (já garantido por checks.sh)
+#
+# NOTA: 'fpm' e o 'appimagetool' NÃO entram aqui de propósito — o
+# electron-builder baixa os dois para ~/.cache/electron-builder/ e usa os
+# binários de lá. Instalar versões do sistema por cima só cria divergência.
+#
+# Linhas em branco e comentários (#) são ignorados pelo instalador.
+
+# === Empacotadores nativos chamados pelo electron-builder/fpm ===
+dpkg
+rpm-tools
+libarchive
+squashfs-tools
+
+# === Validação e ajuste dos binários gerados ===
+desktop-file-utils
+patchelf
+
+# === Necessário para EXECUTAR o AppImage depois de gerado ===
+# AppImage é um SquashFS montado em runtime; sem o FUSE 2 o arquivo é criado
+# normalmente, mas não roda ("dlopen(): error loading libfuse.so.2").
+fuse2
+
+# === Toolchain do projeto (electron-builder roda sobre Node) ===
+nodejs
+npm
+# python é exigido pelo node-gyp ao compilar módulos nativos do Node
+python

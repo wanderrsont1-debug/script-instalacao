@@ -224,6 +224,120 @@ deploy_dotfiles() {
 }
 
 # ═════════════════════════════════════════════════════════════
+# TEMA DE CURSOR — aplicar $CURSOR_THEME a TODOS os configs implantados
+#
+# Um cursor no Linux é escolhido por vários mecanismos independentes, e cada
+# app usa o que conhece. Se eles discordam, o cursor muda ao passar o mouse de
+# uma janela para outra — que era exatamente o estado deste repositório:
+# .Xresources dizia "Bibata-Modern-Amber", misc.kdl dizia "Bibata-Modern-Ice",
+# e o hyprland.lua não dizia nada (caía no padrão do sistema).
+#
+# Os quatro mecanismos cobertos aqui:
+#   niri (misc.kdl)          → apps Wayland sob o Niri
+#   hyprland.lua (XCURSOR_*) → apps Wayland sob o Hyprland
+#   environment.d            → variáveis de ambiente da sessão (pega o resto)
+#   .Xresources              → apps X11/XWayland
+#   gtk-3.0 / gtk-4.0        → apps GTK, que preferem o próprio settings.ini
+#
+# Reescreve valores em vez de acrescentar linhas: rodar o instalador de novo
+# (o fluxo de atualização deste projeto) não pode acumular duplicatas.
+# ═════════════════════════════════════════════════════════════
+apply_cursor_theme() {
+    local user_home
+    user_home=$(get_user_home)
+    local theme="${CURSOR_THEME:-Bibata-Original-Amber}"
+    local size="${CURSOR_SIZE:-28}"
+
+    log_info "Aplicando o tema de cursor '$theme' (tamanho $size) aos configs..."
+
+    # ── 1. Niri (KDL) ────────────────────────────────────────
+    local misc_kdl="$user_home/.config/niri/cfg/misc.kdl"
+    if [ -f "$misc_kdl" ]; then
+        sed -i -E "s|^([[:space:]]*)xcursor-theme[[:space:]]+\".*\"|\1xcursor-theme \"${theme}\"|" "$misc_kdl"
+        sed -i -E "s|^([[:space:]]*)xcursor-size[[:space:]]+[0-9]+|\1xcursor-size ${size}|"        "$misc_kdl"
+        log_success "  niri/cfg/misc.kdl"
+    fi
+
+    # ── 2. Hyprland (Lua) ────────────────────────────────────
+    # A config só definia XCURSOR_SIZE. Sem XCURSOR_THEME o Hyprland usa o
+    # cursor padrão do sistema, ignorando o tema instalado.
+    local hypr_lua="$user_home/.config/hypr/hyprland.lua"
+    if [ -f "$hypr_lua" ]; then
+        sed -i -E "s|^([[:space:]]*)hl\.env\(\"XCURSOR_SIZE\",[[:space:]]*\"[0-9]+\"\)|\1hl.env(\"XCURSOR_SIZE\", \"${size}\")|"       "$hypr_lua"
+        sed -i -E "s|^([[:space:]]*)hl\.env\(\"HYPRCURSOR_SIZE\",[[:space:]]*\"[0-9]+\"\)|\1hl.env(\"HYPRCURSOR_SIZE\", \"${size}\")|" "$hypr_lua"
+        sed -i -E "s|^([[:space:]]*)hl\.env\(\"XCURSOR_THEME\",[[:space:]]*\".*\"\)|\1hl.env(\"XCURSOR_THEME\", \"${theme}\")|"        "$hypr_lua"
+
+        # Ainda não existia a linha do tema? Acrescentar logo após a do tamanho.
+        if ! grep -q 'XCURSOR_THEME' "$hypr_lua"; then
+            sed -i -E "/hl\.env\(\"XCURSOR_SIZE\"/a hl.env(\"XCURSOR_THEME\", \"${theme}\")" "$hypr_lua"
+        fi
+        log_success "  hypr/hyprland.lua"
+    fi
+
+    # ── 3. environment.d (variáveis da sessão) ───────────────
+    # Arquivo próprio, com número alto, para vencer os demais sem editá-los.
+    local envd_dir="$user_home/.config/environment.d"
+    mkdir -p "$envd_dir"
+    {
+        echo "# Gerado pelo instalador — tema de cursor do ambiente."
+        echo "# Editar CURSOR_THEME/CURSOR_SIZE em lib/utils.sh, não aqui:"
+        echo "# este arquivo é sobrescrito a cada execução do instalador."
+        echo "XCURSOR_THEME=${theme}"
+        echo "XCURSOR_SIZE=${size}"
+    } > "$envd_dir/95-cursor.conf"
+    log_success "  environment.d/95-cursor.conf"
+
+    # ── 4. .Xresources (apps X11 / XWayland) ─────────────────
+    local xres="$user_home/.Xresources"
+    if [ -f "$xres" ]; then
+        sed -i -E "s|^Xcursor\.theme:.*|Xcursor.theme: ${theme}|" "$xres"
+        sed -i -E "s|^Xcursor\.size:.*|Xcursor.size: ${size}|"    "$xres"
+        log_success "  .Xresources"
+    fi
+
+    # ── 5. GTK 3 e 4 ─────────────────────────────────────────
+    # Apps GTK preferem o próprio settings.ini às variáveis de ambiente; sem
+    # isto o Nautilus e o gnome-text-editor ficavam com o cursor do Adwaita.
+    local gtk_ver gtk_ini
+    for gtk_ver in gtk-3.0 gtk-4.0; do
+        gtk_ini="$user_home/.config/$gtk_ver/settings.ini"
+        mkdir -p "$(dirname "$gtk_ini")"
+        if [ ! -f "$gtk_ini" ]; then
+            printf '[Settings]\ngtk-cursor-theme-name=%s\ngtk-cursor-theme-size=%s\n' "$theme" "$size" > "$gtk_ini"
+        else
+            grep -q '^\[Settings\]' "$gtk_ini" || sed -i '1i [Settings]' "$gtk_ini"
+            if grep -q '^gtk-cursor-theme-name=' "$gtk_ini"; then
+                sed -i -E "s|^gtk-cursor-theme-name=.*|gtk-cursor-theme-name=${theme}|" "$gtk_ini"
+            else
+                sed -i "/^\[Settings\]/a gtk-cursor-theme-name=${theme}" "$gtk_ini"
+            fi
+            if grep -q '^gtk-cursor-theme-size=' "$gtk_ini"; then
+                sed -i -E "s|^gtk-cursor-theme-size=.*|gtk-cursor-theme-size=${size}|" "$gtk_ini"
+            else
+                sed -i "/^\[Settings\]/a gtk-cursor-theme-size=${size}" "$gtk_ini"
+            fi
+        fi
+        log_success "  $gtk_ver/settings.ini"
+    done
+
+    # ── 6. Cursor padrão do X (index.theme) ──────────────────
+    # Alguns apps legados leem só ~/.icons/default/index.theme.
+    mkdir -p "$user_home/.icons/default"
+    printf '[Icon Theme]\nInherits=%s\n' "$theme" > "$user_home/.icons/default/index.theme"
+
+    # Propriedade correta caso o instalador tenha sido chamado via sudo.
+    local real_user
+    real_user=$(detect_user)
+    chown -R "$real_user":"$real_user" \
+        "$envd_dir" "$user_home/.icons" \
+        "$user_home/.config/gtk-3.0" "$user_home/.config/gtk-4.0" 2>/dev/null || true
+    chown "$real_user":"$real_user" "$xres" 2>/dev/null || true
+
+    log_success "Tema de cursor '$theme' aplicado a todos os mecanismos."
+    return 0
+}
+
+# ═════════════════════════════════════════════════════════════
 # AGENTE POLKIT — por que este código existe
 #
 # Os DOIS shells suportados trazem agente polkit próprio:

@@ -10,6 +10,24 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# ─────────────────────────────────────────────────────────────
+# Tema de cursor — FONTE ÚNICA da verdade
+#
+# Antes o nome do tema estava escrito à mão em quatro lugares independentes, e
+# eles JÁ tinham divergido na prática:
+#   dotfiles/.Xresources        → Bibata-Modern-Amber
+#   dotfiles/niri/cfg/misc.kdl  → Bibata-Modern-Ice
+#   lib/packages.sh             → instalava Bibata-Modern-Ice
+#   dotfiles/hypr/hyprland.lua  → só definia o TAMANHO, sem tema
+# Resultado: o cursor mudava conforme o app (X11 via Xresources vs. Wayland via
+# niri) e o Hyprland caía no cursor padrão do sistema.
+#
+# Agora o nome existe UMA vez. install_cursor_theme() instala este tema e
+# apply_cursor_theme() reescreve todos os configs implantados para ele.
+# Dá para trocar sem editar o script:  CURSOR_THEME=Bibata-Modern-Ice ./install.sh
+CURSOR_THEME="${CURSOR_THEME:-Bibata-Original-Amber}"
+CURSOR_SIZE="${CURSOR_SIZE:-28}"
+
 # Funções de logging
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
