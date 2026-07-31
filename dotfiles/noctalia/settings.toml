@@ -23,19 +23,50 @@
 #   • [plugin_settings."apex077/eyecare"]
 #       → sobra de um plugin não instalado; gerava um aviso repetido no log
 #         ("no loaded plugin with this id") a cada recarga de config.
+#   • Os widgets "wallhaven" (dentro do grupo "g1") e "widget" (plugin
+#     pomodoro) na barra superior
+#       → dependem dos plugins "noctalia/wallhaven" e "thepunkoff/pomodoro",
+#         que este script não instala. Sem o plugin, o widget aparece
+#         quebrado/órfão na barra. Quem quiser, adiciona pela interface em
+#         Settings → Plugins e depois inclui o widget na barra manualmente.
 # ════════════════════════════════════════════════════════════════════
 
-config_version = 2
+config_version = 8
 
 [audio]
 enable_sounds = true
 
-# Barra superior. O widget "wallhaven" foi retirado da lista de propósito:
-# ele depende do plugin homônimo, que por sua vez exige a chave de API acima.
-# Com o plugin ausente, um widget órfão apareceria quebrado na barra.
+# Barra superior — layout atual (thickness, escala, grupos e ordem dos
+# ícones). Os widgets de plugin (wallhaven, pomodoro) foram deixados de fora,
+# ver nota de sanitização acima.
 [bar.default]
-center = [ "clock", "brightness" ]
-start = [ "launcher", "wallpaper", "workspaces", "temp" ]
+center = [ "clock" ]
+end = [
+    "media",
+    "tray",
+    "notifications",
+    "clipboard",
+    "bluetooth",
+    "volume",
+    "brightness",
+    "battery",
+    "control-center",
+    "session"
+]
+margin_opposite_edge = 8
+padding = 18
+scale = 1.1
+shadow = false
+start = [ "launcher", "group:g1", "workspaces", "temp" ]
+thickness = 41
+
+    [[bar.default.capsule_group]]
+    enabled = true
+    fill = "surface_variant"
+    id = "g1"
+    members = [ "wallpaper" ]
+    opacity = 1.0
+    padding = 6.0
 
 [brightness]
 # Controle de brilho por DDC/CI (monitores externos). Sem o ddcutil instalado
@@ -68,3 +99,8 @@ screen_time_enabled = true
 
 [theme]
 builtin = "Ayu"
+
+# O widget "media" fica listado em [bar.default].end mas desativado — assim
+# ele não ocupa espaço na barra quando não há player de mídia ativo.
+[widget.media]
+enabled = false
