@@ -14,7 +14,7 @@ binds {
     Mod+Return                          hotkey-overlay-title="Open Terminal: Ghostty" { spawn "ghostty"; }
     CTRL+ALT+T                          hotkey-overlay-title="Open Terminal: Ghostty" { spawn "ghostty"; }
     CTRL+space                     hotkey-overlay-title="Open App Launcher: DMS Spotlight" { spawn "dms" "ipc" "call" "spotlight" "toggle"; }
-    Mod+B                               hotkey-overlay-title="Open Browser: Firefox" { spawn "firefox"; }
+    Mod+B                               hotkey-overlay-title="Open Browser" { spawn "sh" "-c" "gtk-launch $(xdg-settings get default-web-browser)"; }
     Mod+ALT+L                           hotkey-overlay-title="Lock Screen: DMS Lock" { spawn "dms" "ipc" "call" "lock" "lock"; }
     Mod+Shift+Q                        hotkey-overlay-title="Session Menu: DMS PowerMenu" { spawn "dms" "ipc" "call" "powermenu" "toggle"; }
     CTRL+ALT+C                          hotkey-overlay-title="Open Settings: DMS Settings" { spawn "dms" "ipc" "call" "settings" "toggle"; }

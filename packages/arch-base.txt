@@ -85,6 +85,9 @@ qt6-wayland
 
 # === Integração de sistema ===
 xdg-utils
+# desktop-file-utils traz o 'gtk-launch', usado pelo atalho Mod+B do niri
+# para abrir o navegador padrão (via 'xdg-settings get default-web-browser').
+desktop-file-utils
 libsecret
 # NOTA: 'polkit-gnome' foi removido de propósito. DMS e Noctalia trazem agente
 # polkit próprio; um segundo agente na mesma sessão disputa o nome no D-Bus e
